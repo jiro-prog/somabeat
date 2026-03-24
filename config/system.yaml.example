@@ -1,0 +1,100 @@
+# Somabeat — Bio-inspired Integrated AI Architecture — Configuration Template
+# Copy this file to system.yaml and fill in your values.
+
+system:
+  name: "integrated-system"
+  version: "0.1.0"
+
+shared_state:
+  backend: "chromadb"
+  chromadb:
+    persist_directory: "data/chromadb"
+    collection_name: "shared_field"
+
+encoder:
+  model_name: "intfloat/multilingual-e5-small"
+  dimensionality: 384
+
+# llamarcute-live uses a BASE model (no fine-tuning).
+# SleepyJean uses a SEPARATE model. These must never be the same.
+llamarcute_live:
+  personality_path: "llamarcute_live/data/personality_v0.yaml"
+  dialogue_db_path: "data/llamarcute_live.db"
+  sense:
+    max_signals: 10
+    min_relevance: 0.1
+    time_horizon_hours: 168  # 7 days
+  self_awareness_query: "最近の自分の調子"
+  latency_target_ms: 500
+  use_llm: true
+  ollama_model: "qwen3:8b"       # Base model. Do NOT use a fine-tuned model here.
+  max_conversation_history: 10
+
+sleepyjean:
+  root_path: "/path/to/sleepyjean"
+  night_cycle_script: "scripts/night/night_cycle.py"
+  db_path: "/path/to/sleepyjean/scripts/data/sodateai.db"
+  knowledge_index_path: "/path/to/sleepyjean/knowledge_index/knowledge_index.json"
+  ollama_model: "sleepyjean"      # Fine-tuned model. Must differ from llamarcute_live.
+
+orchestrator:
+  sleep_trigger: "manual"  # manual | schedule
+
+discord:
+  token_env: "DISCORD_TOKEN"      # Name of the env var holding the bot token
+  active_channel_id: 0            # Your Discord channel ID
+  typing_indicator: true
+
+schedule:
+  enabled: true
+  sleep_hour: 3
+  sleep_minute: 0
+
+notifications:
+  wake_enabled: true
+  wake_channel_id: null           # null = use active_channel_id
+
+purge:
+  enabled: true
+  max_age_days: 7
+
+self_improvement:
+  enabled: true
+  core_tasks_path: "llamarcute_live/tasks/core_tasks.json"
+  cuteness_topics_path: "llamarcute_live/tasks/cuteness_topics_ja.json"
+  fitness_weight: 0.75
+  cuteness_weight: 0.25
+  num_mutation_candidates: 3
+  min_candidates_for_eval: 2
+  ollama_parallel: 2
+  difficulty_time_horizon_hours: 24
+
+cleaner:
+  enabled: true
+  chromadb:
+    path: "/path/to/sleepyjean/data/chromadb"
+    collection_name: "sleepyjean_knowledge"
+    max_generations_per_topic: 1
+    max_age_days: 90
+  lora:
+    adapter_dir: "/path/to/sleepyjean/models/lora"
+    max_keep: 3
+
+metrics:
+  enabled: true
+
+immune:
+  enabled: true
+  backup_dir: "data/personality_backups"
+  max_backups: 5
+  thresholds:
+    fitness_warning: 0.80
+    fitness_critical: 0.70
+    rule_count_warning: 13
+    rule_count_critical: 15
+    token_count_warning: 650
+    token_count_critical: 800
+    cycle_time_warning_s: 2500
+    cycle_time_critical_s: 3600
+    cuteness_warning: 2.0
+    consecutive_retain_warning: 3

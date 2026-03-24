@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+env/
+venv/
+.venv/
+
+# Databases
+*.db
+*.sqlite3
+
+# ChromaDB
+data/chromadb/
+
+# Models & training data
+models/
+*.gguf
+*.safetensors
+*.pt
+*.pth
+
+# Configuration (real values)
+config/system.yaml
+.env
+
+# Runtime data
+data/cycle_history.json
+data/cycle_results.json
+data/personality_backups/
+data/t28/
+data/experiment*_results.json
+data/experiment*_evaluation.json
+data/phase*_results.json
+data/pilot_*_results.json
+
+# LoRA (disabled but guard against accidental inclusion)
+lora_output/
+
+# Internal docs (reports, instructions — not for public)
+docs/report/
+docs/design/instructions_*.md
+docs/design/sleepyjean_improvement_taskflow.md
+docs/design/t12_interim_evaluation.md
+docs/*_report.md
+
+# Systemd service (deployment-specific)
+*.service
+
+# Internal scripts (keep only experiment scripts public)
+scripts/run_cycle.py
+scripts/run_phase*.py
+scripts/run_pilot_*.py
+scripts/run_t28_*.py
+scripts/purge_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Claude Code local data
+.claude/

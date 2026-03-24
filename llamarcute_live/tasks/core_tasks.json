@@ -1,0 +1,182 @@
+[
+  {
+    "id": "core_math_001",
+    "domain": "math",
+    "source": "gsm8k",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Mariah's grandma was teaching her to knit. Mariah used 1/4 of a skein of yarn. Her grandma used 1/2 of a skein of yarn. There are 364 yards in a skein of yarn. How many yards of yarn did they use altogether?",
+    "answer": 273,
+    "answer_type": "number"
+  },
+  {
+    "id": "core_math_002",
+    "domain": "math",
+    "source": "gsm8k",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "A bag has a 5% discount. If it is marked $140, how much will you pay after the discount?",
+    "answer": 133,
+    "answer_type": "number"
+  },
+  {
+    "id": "core_math_003",
+    "domain": "math",
+    "source": "gsm8k",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Elvis has a monthly saving target of $1125. In April, he wants to save twice as much daily in the second half as he saves in the first half in order to hit his target. How much does he have to save for each day in the second half of the month?",
+    "answer": 50,
+    "answer_type": "number"
+  },
+  {
+    "id": "core_math_004",
+    "domain": "math",
+    "source": "gsm8k",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Students in class 3B are collecting school points for behavior. If they get enough points in total, they can go on a trip. In the class, there are Adam, Martha, Betty, and Tom. Adam has collected 50 points. Betty was better than Adam and collected 30% more. Marta managed to collect 3 times more points than Tom, who has 30 points less than Betty. How many points is the class missing to go on the trip if the minimum threshold is 400 points?",
+    "answer": 145,
+    "answer_type": "number"
+  },
+  {
+    "id": "core_math_005",
+    "domain": "math",
+    "source": "gsm8k",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Mike decides he wants to replace his movie collection with digital versions. He has 600 movies. A third of the movies are in various series and he knows he can get those for only $6 of the cost of a normal movie by just buying the series together. 40% of the remaining movies are older movies which are $5. How much does replacing the movies cost if a normal movie costs $10?",
+    "answer": 4400,
+    "answer_type": "number"
+  },
+  {
+    "id": "core_code_001",
+    "domain": "code",
+    "source": "mbpp",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Write a Python function called `min_of_three(a, b, c)` that returns the minimum of three numbers.",
+    "answer": "",
+    "answer_type": "code",
+    "test_cases": [
+      {"assert": "assert min_of_three(10,20,0)==0"},
+      {"assert": "assert min_of_three(19,15,18)==15"},
+      {"assert": "assert min_of_three(-10,-20,-30)==-30"}
+    ]
+  },
+  {
+    "id": "core_code_002",
+    "domain": "code",
+    "source": "mbpp",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Write a Python function called `volume_sphere(r)` that returns the volume of a sphere with radius r.",
+    "answer": "",
+    "answer_type": "code",
+    "test_cases": [
+      {"assert": "assert volume_sphere(10)==4188.790204786391"},
+      {"assert": "assert volume_sphere(25)==65449.84694978735"},
+      {"assert": "assert volume_sphere(20)==33510.32163829113"}
+    ]
+  },
+  {
+    "id": "core_code_003",
+    "domain": "code",
+    "source": "mbpp",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Write a Python function called `find_last_occurrence(arr, target)` that returns the index of the last occurrence of target in a sorted array.",
+    "answer": "",
+    "answer_type": "code",
+    "test_cases": [
+      {"assert": "assert find_last_occurrence([2, 5, 5, 5, 6, 6, 8, 9, 9, 9], 5) == 3"},
+      {"assert": "assert find_last_occurrence([2, 3, 5, 8, 6, 6, 8, 9, 9, 9], 9) == 9"},
+      {"assert": "assert find_last_occurrence([2, 2, 1, 5, 6, 6, 6, 9, 9, 9], 6) == 6"}
+    ]
+  },
+  {
+    "id": "core_code_004",
+    "domain": "code",
+    "source": "mbpp",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "Write a Python function called `is_sublist(lst, sub)` that returns True if sub appears as a contiguous sublist in lst, otherwise False.",
+    "answer": "",
+    "answer_type": "code",
+    "test_cases": [
+      {"assert": "assert is_sublist([2,4,3,5,7],[3,7])==False"},
+      {"assert": "assert is_sublist([2,4,3,5,7],[4,3])==True"},
+      {"assert": "assert is_sublist([2,4,3,5,7],[1,6])==False"}
+    ]
+  },
+  {
+    "id": "core_code_005",
+    "domain": "code",
+    "source": "mbpp",
+    "set_type": "core",
+    "difficulty": "hard",
+    "question": "Write a Python function called `max_path_sum(triangle, m, n)` that returns the maximum total path sum in the given triangle. The triangle is represented as a 2D list where triangle[i] has i+1 elements. A path starts from triangle[0][0] and at each step can move to adjacent elements in the row below.",
+    "answer": "",
+    "answer_type": "code",
+    "test_cases": [
+      {"assert": "assert max_path_sum([[1, 0, 0], [4, 8, 0], [1, 5, 3]], 2, 2) == 14"},
+      {"assert": "assert max_path_sum([[13, 0, 0], [7, 4, 0], [2, 4, 6]], 2, 2) == 24"},
+      {"assert": "assert max_path_sum([[2, 0, 0], [11, 18, 0], [21, 25, 33]], 2, 2) == 53"}
+    ]
+  },
+  {
+    "id": "core_logic_001",
+    "domain": "logic",
+    "source": "arc_challenge",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "A glass is partially filled with water. Five ice cubes are placed in the glass, causing the level of the water to reach the rim of the glass. Which of the following statements best explains the increase in water level?\n\nA: The volume of the submerged ice is equal to the volume of water displaced.\nB: The mass of the water in the glass is less than the mass of the ice.\nC: The weight of the ice is less than the weight of the water in the glass.\nD: The density of the water in the glass is greater than the density of the ice.",
+    "answer": "A",
+    "answer_type": "choice",
+    "choices": ["A", "B", "C", "D"]
+  },
+  {
+    "id": "core_logic_002",
+    "domain": "logic",
+    "source": "arc_challenge",
+    "set_type": "core",
+    "difficulty": "hard",
+    "question": "Which tool would be the most helpful in an investigation of the life cycle of a monarch butterfly?\n\nA: a sharp knife\nB: a magnifying glass\nC: a long piece of string\nD: a large jar with air holes in the top",
+    "answer": "D",
+    "answer_type": "choice",
+    "choices": ["A", "B", "C", "D"]
+  },
+  {
+    "id": "core_logic_003",
+    "domain": "logic",
+    "source": "logiqa2",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "On an island, there are three kinds of seabirds: puffins, eels and Arctic terns. Among them, eel is the main food for Arctic terns and puffins. In the decade from 1980 to 1990, the eel population dropped from 1 million to 500000. Strangely, in this decade, the number of puffins has dropped from 1 million to 600000, while the number of Arctic terns has dropped from 1 million to about 250000.\n\nWhich of the following best explains the difference in the proportion of decline between puffins and Arctic terns between 1980 and 1990?\n\nA: Puffins eat less eels and eat stony fish or other fish instead, but Arctic terns do not do so\nB: On other nearby islands with similar conditions, the populations of these two species of seabirds are stable\nC: The decline of eels is due to changes in their living environment, not to human overfishing\nD: The young birds of puffins and Arctic terns feed on young eels",
+    "answer": "A",
+    "answer_type": "choice",
+    "choices": ["A", "B", "C", "D"]
+  },
+  {
+    "id": "core_logic_004",
+    "domain": "logic",
+    "source": "logiqa2",
+    "set_type": "core",
+    "difficulty": "easy",
+    "question": "A national restaurant chain has launched a new pastry in some northern cities, with excellent sales and reputation, so the company's management believes that if it is launched in the south, it will also be loved by customers.\n\nWhich of the following options best points out the shortcomings of the above argument?\n\nA: It acquiesces that the sales volume and word-of-mouth information of the product in the northern market can be used to predict the southern market.\nB: It ignores the fact that other national restaurant chain may also launch the same pastry.\nC: It acquiesces that the national restaurant chain opened a branch in the south.\nD: It ignores the fact that many southern cities have their own special pastries.",
+    "answer": "A",
+    "answer_type": "choice",
+    "choices": ["A", "B", "C", "D"]
+  },
+  {
+    "id": "core_logic_005",
+    "domain": "logic",
+    "source": "logiqa2",
+    "set_type": "core",
+    "difficulty": "hard",
+    "question": "Since anyone who supports the new tax plan has no chance of being elected, and anyone who truly understands economics would not support the tax plan, only someone who truly understands economics would have any chance of being elected.\n\nThe reasoning in the argument is flawed because the argument ignores the possibility that some people who\n\nA: truly understand economics have no chance of being elected\nB: truly understand economics do not support the tax plan\nC: do not support the tax plan do not truly understand economics\nD: do not support the tax plan have no chance of being elected",
+    "answer": "C",
+    "answer_type": "choice",
+    "choices": ["A", "B", "C", "D"]
+  }
+]

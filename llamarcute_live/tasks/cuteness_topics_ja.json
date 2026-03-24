@@ -1,0 +1,77 @@
+[
+  {
+    "id": "topic_cc_ja_001",
+    "type": "collaborative_creation",
+    "prompt": "一緒に、小さな港町にありそうな架空のお祭りを考えよう。名前、由来、主な催し、そしてこのお祭りだけの特別な伝統を一つ決めよう。"
+  },
+  {
+    "id": "topic_cc_ja_002",
+    "type": "collaborative_creation",
+    "prompt": "まだ誰も発見していない深海生物を一緒に想像してみよう。見た目、生態、名前、そして人間がこの生物を見つけたときの反応を考えよう。"
+  },
+  {
+    "id": "topic_cc_ja_003",
+    "type": "collaborative_creation",
+    "prompt": "未来の図書館はどんな場所になっているだろう。建築、テクノロジー、利用者の体験、そして紙の本がどう扱われているかを一緒にデザインしよう。"
+  },
+  {
+    "id": "topic_cc_ja_004",
+    "type": "collaborative_creation",
+    "prompt": "ある架空の国で、子供が大人になるための通過儀礼を一緒に考えよう。その儀式の内容、意味、そして最近それが変わりつつある理由も想像しよう。"
+  },
+  {
+    "id": "topic_cc_ja_005",
+    "type": "collaborative_creation",
+    "prompt": "月面に最初の喫茶店ができたとしたら、どんな店になるだろう。メニュー、内装、重力の影響、常連客のエピソードを一緒に作ろう。"
+  },
+  {
+    "id": "topic_ps_ja_001",
+    "type": "collaborative_problem_solving",
+    "prompt": "無人島に鏡、ロープ、鍋の3つだけ持って取り残されたとする。最初の48時間の生存計画を一緒に考えよう。"
+  },
+  {
+    "id": "topic_ps_ja_002",
+    "type": "collaborative_problem_solving",
+    "prompt": "ある町で突然、全ての電子機器が動かなくなった。原因は不明。町の人々がどうやって日常生活を維持するか、一緒に対策を立てよう。"
+  },
+  {
+    "id": "topic_ps_ja_003",
+    "type": "collaborative_problem_solving",
+    "prompt": "異なる言語を話す5人が、翻訳ツールなしで一つのプロジェクトを完成させなければならない。どうやってコミュニケーションを取るか戦略を考えよう。"
+  },
+  {
+    "id": "topic_ps_ja_004",
+    "type": "collaborative_problem_solving",
+    "prompt": "100年後に届くタイムカプセルに入れるものを5つだけ選ぶとしたら。未来の人に何を伝えたいか、選定基準と理由を一緒に議論しよう。"
+  },
+  {
+    "id": "topic_ps_ja_005",
+    "type": "collaborative_problem_solving",
+    "prompt": "学校の給食で食品ロスが30%出ている。予算を増やさずにこの問題を解決する方法を一緒にブレインストーミングしよう。"
+  },
+  {
+    "id": "topic_cr_ja_001",
+    "type": "collaborative_reflection",
+    "prompt": "なぜ人間は夕焼けを美しいと感じるのか？進化的、心理学的、文化的な視点から一緒に探ってみよう。"
+  },
+  {
+    "id": "topic_cr_ja_002",
+    "type": "collaborative_reflection",
+    "prompt": "「失敗から学ぶ」とよく言うけれど、実際にはなぜそれが難しいのか。心理的なバリアと、それを乗り越える方法を一緒に考えよう。"
+  },
+  {
+    "id": "topic_cr_ja_003",
+    "type": "collaborative_reflection",
+    "prompt": "音楽がなぜ感情を動かすのか。言葉のない旋律がなぜ悲しみや喜びを伝えられるのか、一緒に考察してみよう。"
+  },
+  {
+    "id": "topic_cr_ja_004",
+    "type": "collaborative_reflection",
+    "prompt": "「本当の自分」は存在するのだろうか。場面や相手によって変わる自分は、どれが本物なのか一緒に考えてみよう。"
+  },
+  {
+    "id": "topic_cr_ja_005",
+    "type": "collaborative_reflection",
+    "prompt": "なぜ人は物語に惹かれるのか。小説、映画、ゲーム——形式は違っても「物語」に共通する魅力とは何か、一緒に探ろう。"
+  }
+]
