@@ -205,6 +205,10 @@ class FieldEncoder(Protocol):
         """Encode text to a non-normalized embedding vector."""
         ...
 
+    def encode_image(self, image: NDArray[np.uint8]) -> NDArray[np.float32]:
+        """Encode an image to a non-normalized embedding vector in the shared space."""
+        ...
+
     @property
     def dimensionality(self) -> int:
         """Return the dimensionality of the embedding space."""

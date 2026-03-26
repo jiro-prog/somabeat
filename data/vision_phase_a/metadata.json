@@ -1,0 +1,25 @@
+{
+  "dataset": "asgaardlab/GameplayCaptions",
+  "split": "validation",
+  "full_size": 75979,
+  "sample_size": 6020,
+  "caption_model": "blip2-opt-6.7b_captions.csv",
+  "seed": 42,
+  "games": [
+    "Call of Duty: Modern Warfare 2",
+    "Cyberpunk 2077",
+    "Doom Eternal",
+    "Elden Ring",
+    "Ghost of Tsushima",
+    "God of War Ragnarok",
+    "Grand Theft Auto V",
+    "Just Cause 3",
+    "Metro Exodus Enhanced Edition",
+    "Red Dead Redemption 2",
+    "Resident Evil 4 Remake",
+    "Spider-Man Remastered",
+    "The Elder Scrolls V: Skyrim",
+    "The Last of Us",
+    "The Witcher 3: Wild Hunt"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "alpha": 0.5,
+  "best_epoch": 10,
+  "recall": {
+    "img2text_R@1": 0.26273684210526316,
+    "img2text_R@5": 0.5224210526315789,
+    "img2text_R@10": 0.634421052631579,
+    "text2img_R@1": 0.25694736842105265,
+    "text2img_R@5": 0.5110526315789473,
+    "text2img_R@10": 0.6250526315789474
+  },
+  "spearman": 0.925379038530979,
+  "domain_recall": {
+    "VideoGameBunny": {
+      "img2text_R@1": 0.1964,
+      "img2text_R@5": 0.4336,
+      "img2text_R@10": 0.5584,
+      "text2img_R@1": 0.19,
+      "text2img_R@5": 0.4228,
+      "text2img_R@10": 0.5448
+    },
+    "COCO": {
+      "img2text_R@1": 0.359,
+      "img2text_R@5": 0.69,
+      "img2text_R@10": 0.808,
+      "text2img_R@1": 0.3565,
+      "text2img_R@5": 0.672,
+      "text2img_R@10": 0.795
+    },
+    "CC3M": {
+      "img2text_R@1": 0.2836,
+      "img2text_R@5": 0.5342,
+      "img2text_R@10": 0.6324,
+      "text2img_R@1": 0.274,
+      "text2img_R@5": 0.5212,
+      "text2img_R@10": 0.6304
+    }
+  },
+  "gate": {
+    "recall_i2t_10_pass": true,
+    "recall_t2i_10_pass": true,
+    "spearman_pass": true
+  }
+}

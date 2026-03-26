@@ -1,0 +1,25 @@
+{
+  "split": {
+    "train": 5000,
+    "val": 520,
+    "test": 500
+  },
+  "training": {
+    "parameters": 294912,
+    "device": "cuda"
+  },
+  "recall": {
+    "img2text_R@1": 0.1,
+    "img2text_R@5": 0.278,
+    "img2text_R@10": 0.404,
+    "text2img_R@1": 0.17,
+    "text2img_R@5": 0.414,
+    "text2img_R@10": 0.55
+  },
+  "gate": {
+    "metric": "img2text_R@10",
+    "value": 0.404,
+    "threshold": 0.3,
+    "result": "PASS"
+  }
+}

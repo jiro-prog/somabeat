@@ -31,6 +31,12 @@ models/
 config/system.yaml
 .env
 
+# Vision data (large binaries, training caches, backups)
+data/vision_phase_a/*.npy
+data/vision_phase_b/*.npy
+data/vision_phase_b/*.log
+data/chromadb_backup_pre_vision.json
+
 # Runtime data
 data/cycle_history.json
 data/cycle_results.json
@@ -44,11 +50,10 @@ data/pilot_*_results.json
 # LoRA (disabled but guard against accidental inclusion)
 lora_output/
 
-# Internal docs (reports, instructions — not for public)
+# Internal docs (reports, instructions, original design sources — not for public)
+# Public design docs are in docs/ (flat). docs/design/ is the working directory.
+docs/design/
 docs/report/
-docs/design/instructions_*.md
-docs/design/sleepyjean_improvement_taskflow.md
-docs/design/t12_interim_evaluation.md
 docs/*_report.md
 
 # Systemd service (deployment-specific)

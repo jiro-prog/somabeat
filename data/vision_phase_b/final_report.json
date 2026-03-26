@@ -1,0 +1,145 @@
+{
+  "all_results": [
+    {
+      "alpha": 1.0,
+      "best_epoch": 15,
+      "recall": {
+        "img2text_R@1": 0.265578947368421,
+        "img2text_R@5": 0.5211578947368422,
+        "img2text_R@10": 0.6333684210526316,
+        "text2img_R@1": 0.24557894736842106,
+        "text2img_R@5": 0.4996842105263158,
+        "text2img_R@10": 0.6208421052631579
+      },
+      "spearman": 0.9488954138804517,
+      "domain_recall": {
+        "VideoGameBunny": {
+          "img2text_R@1": 0.1916,
+          "img2text_R@5": 0.4272,
+          "img2text_R@10": 0.5536,
+          "text2img_R@1": 0.1856,
+          "text2img_R@5": 0.4156,
+          "text2img_R@10": 0.5464
+        },
+        "COCO": {
+          "img2text_R@1": 0.3605,
+          "img2text_R@5": 0.69,
+          "img2text_R@10": 0.816,
+          "text2img_R@1": 0.3355,
+          "text2img_R@5": 0.671,
+          "text2img_R@10": 0.797
+        },
+        "CC3M": {
+          "img2text_R@1": 0.2824,
+          "img2text_R@5": 0.5298,
+          "img2text_R@10": 0.633,
+          "text2img_R@1": 0.263,
+          "text2img_R@5": 0.51,
+          "text2img_R@10": 0.6182
+        }
+      },
+      "gate": {
+        "recall_i2t_10_pass": true,
+        "recall_t2i_10_pass": true,
+        "spearman_pass": true
+      }
+    },
+    {
+      "alpha": 0.5,
+      "best_epoch": 10,
+      "recall": {
+        "img2text_R@1": 0.26273684210526316,
+        "img2text_R@5": 0.5224210526315789,
+        "img2text_R@10": 0.634421052631579,
+        "text2img_R@1": 0.25694736842105265,
+        "text2img_R@5": 0.5110526315789473,
+        "text2img_R@10": 0.6250526315789474
+      },
+      "spearman": 0.925379038530979,
+      "domain_recall": {
+        "VideoGameBunny": {
+          "img2text_R@1": 0.1964,
+          "img2text_R@5": 0.4336,
+          "img2text_R@10": 0.5584,
+          "text2img_R@1": 0.19,
+          "text2img_R@5": 0.4228,
+          "text2img_R@10": 0.5448
+        },
+        "COCO": {
+          "img2text_R@1": 0.359,
+          "img2text_R@5": 0.69,
+          "img2text_R@10": 0.808,
+          "text2img_R@1": 0.3565,
+          "text2img_R@5": 0.672,
+          "text2img_R@10": 0.795
+        },
+        "CC3M": {
+          "img2text_R@1": 0.2836,
+          "img2text_R@5": 0.5342,
+          "img2text_R@10": 0.6324,
+          "text2img_R@1": 0.274,
+          "text2img_R@5": 0.5212,
+          "text2img_R@10": 0.6304
+        }
+      },
+      "gate": {
+        "recall_i2t_10_pass": true,
+        "recall_t2i_10_pass": true,
+        "spearman_pass": true
+      }
+    },
+    {
+      "alpha": 0.1,
+      "best_epoch": 10,
+      "recall": {
+        "img2text_R@1": 0.26021052631578945,
+        "img2text_R@5": 0.5278947368421053,
+        "img2text_R@10": 0.6398947368421053,
+        "text2img_R@1": 0.2553684210526316,
+        "text2img_R@5": 0.5065263157894737,
+        "text2img_R@10": 0.62
+      },
+      "spearman": 0.8535175459588703,
+      "domain_recall": {
+        "VideoGameBunny": {
+          "img2text_R@1": 0.1792,
+          "img2text_R@5": 0.4296,
+          "img2text_R@10": 0.54,
+          "text2img_R@1": 0.1856,
+          "text2img_R@5": 0.416,
+          "text2img_R@10": 0.5344
+        },
+        "COCO": {
+          "img2text_R@1": 0.364,
+          "img2text_R@5": 0.7,
+          "img2text_R@10": 0.8225,
+          "text2img_R@1": 0.3525,
+          "text2img_R@5": 0.675,
+          "text2img_R@10": 0.8045
+        },
+        "CC3M": {
+          "img2text_R@1": 0.2798,
+          "img2text_R@5": 0.5386,
+          "img2text_R@10": 0.6418,
+          "text2img_R@1": 0.2724,
+          "text2img_R@5": 0.515,
+          "text2img_R@10": 0.6208
+        }
+      },
+      "gate": {
+        "recall_i2t_10_pass": true,
+        "recall_t2i_10_pass": true,
+        "spearman_pass": true
+      }
+    }
+  ],
+  "selected_alpha": 0.5,
+  "gate_result": "PASS",
+  "phase_c_handoff": {
+    "alpha": 0.5,
+    "common_dim_D": 384,
+    "projection_text_path": "data/vision_phase_b/alpha_0.5/projection_text.pt",
+    "projection_img_path": "data/vision_phase_b/alpha_0.5/projection_img.pt"
+  },
+  "selection_reason": "R@10 equivalent to alpha=0.1, Spearman 0.925 with sufficient margin over 0.85 threshold"
+}

@@ -58,23 +58,33 @@ class TestModelSeparation:
         )
 
     def test_lora_pipeline_targets_sleepyjean_only(self, config):
-        """lora_train.py must only update the 'sleepyjean' ollama model."""
+        """The LoRA pipeline must only update the 'sleepyjean' ollama model.
+
+        lora_train.py trains adapters (no direct Ollama interaction).
+        ollama_reload.py registers the model in Ollama as 'sleepyjean'.
+        Both must not reference the llamarcute-live model (qwen3:8b).
+        """
         sj_root = config.get("sleepyjean", {}).get("root_path", "")
-        lora_train_path = Path(sj_root) / "scripts" / "night" / "lora_train.py"
-        if not lora_train_path.exists():
-            pytest.skip(f"lora_train.py not found at {lora_train_path}")
+        night_dir = Path(sj_root) / "scripts" / "night"
 
-        content = lora_train_path.read_text(encoding="utf-8")
-
-        # _reload_ollama() must create model named "sleepyjean"
-        assert '"sleepyjean"' in content or "'sleepyjean'" in content, (
-            "lora_train.py must target the 'sleepyjean' ollama model"
+        # ollama_reload.py must create model named "sleepyjean"
+        reload_path = night_dir / "ollama_reload.py"
+        if not reload_path.exists():
+            pytest.skip(f"ollama_reload.py not found at {reload_path}")
+        reload_content = reload_path.read_text(encoding="utf-8")
+        assert '"sleepyjean"' in reload_content or "'sleepyjean'" in reload_content, (
+            "ollama_reload.py must target the 'sleepyjean' ollama model"
         )
 
-        # Must NOT reference qwen3:8b (the llamarcute-live model)
-        assert "qwen3:8b" not in content, (
-            "lora_train.py must not reference the llamarcute-live model (qwen3:8b)"
-        )
+        # Neither file must reference qwen3:8b (the llamarcute-live model)
+        ll_model = config["llamarcute_live"]["ollama_model"]
+        for filename in ["lora_train.py", "ollama_reload.py"]:
+            filepath = night_dir / filename
+            if filepath.exists():
+                content = filepath.read_text(encoding="utf-8")
+                assert ll_model not in content, (
+                    f"{filename} must not reference the llamarcute-live model ({ll_model})"
+                )
 
     def test_default_model_in_ollama_client(self):
         """ollama_client DEFAULT_MODEL must match config."""

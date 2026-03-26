@@ -48,6 +48,13 @@ class E5SmallEncoder:
         )
         return np.array(vec, dtype=np.float32)
 
+    def encode_image(self, image: NDArray[np.uint8]) -> NDArray[np.float32]:
+        """E5SmallEncoder does not support image encoding."""
+        raise NotImplementedError(
+            "E5SmallEncoder does not support image encoding. "
+            "Use MultimodalFieldEncoder."
+        )
+
     @property
     def dimensionality(self) -> int:
         return self._dimensionality

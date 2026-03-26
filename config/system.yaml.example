@@ -12,8 +12,14 @@ shared_state:
     collection_name: "shared_field"
 
 encoder:
+  type: "e5_small"  # "e5_small" or "multimodal"
   model_name: "intfloat/multilingual-e5-small"
   dimensionality: 384
+  # Multimodal encoder settings (only used when type: "multimodal")
+  siglip_model_name: "google/siglip2-base-patch16-256"
+  projection_text_path: "data/vision_phase_b/alpha_0.5/projection_text.pt"
+  projection_img_path: "data/vision_phase_b/alpha_0.5/projection_img.pt"
+  device: "cpu"  # SigLIP device. "cpu" recommended to avoid VRAM contention
 
 # llamarcute-live uses a BASE model (no fine-tuning).
 # SleepyJean uses a SEPARATE model. These must never be the same.
@@ -82,6 +88,12 @@ cleaner:
 
 metrics:
   enabled: true
+
+sensory:
+  vision:
+    enabled: false  # Default disabled. Enable after Phase C tests pass
+    thalamus_threshold: 0.1
+    capture_interval_sec: 5.0
 
 immune:
   enabled: true

@@ -1,0 +1,68 @@
+{
+  "cka": {
+    "value": 0.2776121199131012,
+    "interpretation": "mlp_recommended"
+  },
+  "procrustes": {
+    "disparity": 0.8190543065566265,
+    "reduced_dim": 384
+  },
+  "pca_text": {
+    "name": "e5-small (384d)",
+    "original_dim": 384,
+    "effective_dims": {
+      "80%": 51,
+      "90%": 98,
+      "95%": 153,
+      "99%": 275
+    },
+    "top10_variance_ratio": [
+      0.1334715336561203,
+      0.07136470079421997,
+      0.05288812145590782,
+      0.04060188680887222,
+      0.03681262955069542,
+      0.033459242433309555,
+      0.02936146967113018,
+      0.027410365641117096,
+      0.02491540089249611,
+      0.022682620212435722
+    ],
+    "cumulative_at_256": 0.9866568446159363
+  },
+  "pca_image": {
+    "name": "SigLIP ViT-B (768d)",
+    "original_dim": 768,
+    "effective_dims": {
+      "80%": 95,
+      "90%": 196,
+      "95%": 301,
+      "99%": 490
+    },
+    "top10_variance_ratio": [
+      0.09335580468177795,
+      0.07044907659292221,
+      0.057268790900707245,
+      0.04803904891014099,
+      0.042178116738796234,
+      0.02975771762430668,
+      0.021558625623583794,
+      0.020416025072336197,
+      0.01919359154999256,
+      0.017424456775188446
+    ],
+    "cumulative_at_256": 0.9326248168945312
+  },
+  "dimension_recommendation": {
+    "recommended_D": 384,
+    "reason": "95%-effective dims exceed 256 (text=153, img=301); D=384 covers text@95% and img@~93%. Cumulative variance at 256: text=98.7%, img=93.3%",
+    "text_95pct_dims": 153,
+    "img_95pct_dims": 301,
+    "text_cumvar_at_256": 0.9866568446159363,
+    "img_cumvar_at_256": 0.9326248168945312
+  },
+  "mlp_recommendation": {
+    "assessment": "mlp_recommended",
+    "suggested_layers": "2+ layers"
+  }
+}

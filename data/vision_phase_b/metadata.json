@@ -1,0 +1,14 @@
+{
+  "total": 164488,
+  "sources": {
+    "game": 50000,
+    "coco": 38456,
+    "cc3m": 76032
+  },
+  "removed_zero_embeddings": 26016,
+  "splits": {
+    "train": 144988,
+    "val": 10000,
+    "test": 9500
+  }
+}

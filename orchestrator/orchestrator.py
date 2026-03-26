@@ -19,7 +19,7 @@ import yaml
 
 from shared_state.backends.chromadb_backend import ChromaDBField
 from shared_state.encoder import E5SmallEncoder
-from shared_state.interface import PurgeCriteria, SenseParams
+from shared_state.interface import FieldEncoder, PurgeCriteria, SenseParams
 from shared_state.observer import LoggingObserver
 
 from llamarcute_live.dialogue import DialogueManager
@@ -47,6 +47,27 @@ from llamarcute_live.selection import select_and_update
 logger = logging.getLogger(__name__)
 
 
+def _create_encoder(config: dict) -> FieldEncoder:
+    """Create FieldEncoder from config. Falls back to E5SmallEncoder on failure."""
+    encoder_cfg = config.get("encoder", {})
+    encoder_type = encoder_cfg.get("type", "e5_small")
+
+    if encoder_type == "multimodal":
+        try:
+            from shared_state.multimodal_encoder import MultimodalFieldEncoder
+            return MultimodalFieldEncoder(
+                e5_model_name=encoder_cfg.get("model_name", "intfloat/multilingual-e5-small"),
+                siglip_model_name=encoder_cfg.get("siglip_model_name", "google/siglip2-base-patch16-256"),
+                projection_text_path=encoder_cfg.get("projection_text_path", "data/vision_phase_b/alpha_0.5/projection_text.pt"),
+                projection_img_path=encoder_cfg.get("projection_img_path", "data/vision_phase_b/alpha_0.5/projection_img.pt"),
+                device=encoder_cfg.get("device", "cpu"),
+            )
+        except Exception:
+            logger.warning("Failed to initialize MultimodalFieldEncoder, falling back to E5SmallEncoder", exc_info=True)
+
+    return E5SmallEncoder(encoder_cfg.get("model_name", "intfloat/multilingual-e5-small"))
+
+
 class SystemState(enum.Enum):
     AWAKE = "awake"
     SLEEPING = "sleeping"
@@ -66,7 +87,7 @@ class Orchestrator:
             collection_name=config["shared_state"]["chromadb"]["collection_name"],
             observer=self.observer,
         )
-        self.encoder = E5SmallEncoder(config["encoder"]["model_name"])
+        self.encoder: FieldEncoder = _create_encoder(config)
 
         # Personality
         self.personality = Personality.load(config["llamarcute_live"]["personality_path"])
@@ -105,6 +126,18 @@ class Orchestrator:
         self.sj_ki_backup = str(Path(self.sj_ki_path).parent / "knowledge_index_before.json")
         self.sj_training_dir = str(self.sj_root / "data" / "training")
 
+        # Sensory: Vision (optional, default disabled)
+        self._sensory_vision = None
+        sensory_cfg = config.get("sensory", {}).get("vision", {})
+        if sensory_cfg.get("enabled", False):
+            from sensory.vision import SensoryVision
+            self._sensory_vision = SensoryVision(
+                encoder=self.encoder,
+                field=self.field,
+                thalamus_threshold=sensory_cfg.get("thalamus_threshold", 0.1),
+            )
+            logger.info("SensoryVision enabled (threshold=%.2f)", sensory_cfg.get("thalamus_threshold", 0.1))
+
         # CLI
         self.cli = LlamarcuteLiveCLI(
             dialogue=self.dialogue,
@@ -128,9 +161,11 @@ class Orchestrator:
         logger.info("=== ENTERING SLEEP SEQUENCE ===")
         print("[SLEEPING] Entering sleep sequence...")
 
-        # 1. Stop dialogue and clear conversation buffer
+        # 1. Stop dialogue, clear conversation buffer, reset sensory modules
         self.dialogue.stop()
         self.dialogue.clear_history()
+        if self._sensory_vision is not None:
+            self._sensory_vision.clear()
         self.state = SystemState.SLEEPING
 
         # 2. Run sleep_ingest (timeout: 5 min)
