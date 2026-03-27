@@ -201,7 +201,7 @@ def patch_model_for_turboquant(model, compressor: TurboQuantCompressor):
     Returns:
         TurboQuantCache instance to pass to generate().
     """
-    from shared_state.turboquant_triton import turboquant_decode_attention
+    from shared_state.turboquant_fused_attn import turboquant_decode_attention
 
     # Prepare compressor data on model device
     device = next(model.parameters()).device

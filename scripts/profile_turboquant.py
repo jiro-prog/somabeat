@@ -41,7 +41,7 @@ def _cuda_sync_ms(start_event, end_event) -> float:
 
 def patch_model_for_turboquant_profiled(model, compressor: TurboQuantCompressor):
     """Monkey-patch with per-component CUDA event timing."""
-    from shared_state.turboquant_triton import turboquant_decode_attention
+    from shared_state.turboquant_fused_attn import turboquant_decode_attention
 
     device = next(model.parameters()).device
     compressor._ensure_matrices(device)
