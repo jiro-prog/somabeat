@@ -44,8 +44,8 @@ def procrustes_analysis(X: np.ndarray, Y: np.ndarray) -> dict:
 
     Returns disparity (lower = easier to align).
     """
-    # Match dimensions to min(d1, d2) via PCA
-    d_min = min(X.shape[1], Y.shape[1])
+    # Match dimensions to min(n_samples, d1, d2) via PCA
+    d_min = min(X.shape[0], X.shape[1], Y.shape[1])
     pca_x = PCA(n_components=d_min)
     pca_y = PCA(n_components=d_min)
     X_r = pca_x.fit_transform(X)

@@ -22,12 +22,11 @@ from llamarcute_live.metrics import (
 )
 
 
-def _make_weighted_signal(system: str, context: str, trace: str, weight: float) -> WeightedSignal:
+def _make_weighted_signal(system: str, context: str, label: str, weight: float) -> WeightedSignal:
     return WeightedSignal(
         signal=Signal.create(
             embedding=np.zeros(384, dtype=np.float32),
             origin=SignalOrigin(system=system, context=context),
-            trace=trace,
         ),
         relevance=0.5,
         decay_factor=1.0,

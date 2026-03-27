@@ -15,12 +15,16 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import aiosqlite
 import yaml
 
 from shared_state.backends.chromadb_backend import ChromaDBField
 from shared_state.encoder import E5SmallEncoder
-from shared_state.interface import FieldEncoder, PurgeCriteria, SenseParams
+from shared_state.field_receptor import FieldReceptorImpl
+from shared_state.interface import FieldEncoder, PerceiveParams, PurgeCriteria, SenseParams
 from shared_state.observer import LoggingObserver
+
+from llamarcute_live.llm_inference import FieldAwareLLM
 
 from llamarcute_live.dialogue import DialogueManager
 from llamarcute_live.main import LlamarcuteLiveCLI
@@ -100,19 +104,48 @@ class Orchestrator:
             time_horizon=timedelta(hours=sense_cfg["time_horizon_hours"]),
         )
 
-        # Dialogue manager
+        # Dialogue + LLM config
         ll_cfg = config["llamarcute_live"]
         metrics_cfg = config.get("metrics", {})
+
+        # Perceive params
+        perceive_cfg = ll_cfg.get("perceive", {})
+        self.perceive_params = PerceiveParams(
+            min_strength=perceive_cfg.get("min_strength", 1.0),
+            max_signals=perceive_cfg.get("max_signals", 30),
+            time_horizon=timedelta(hours=perceive_cfg["time_horizon_hours"])
+            if "time_horizon_hours" in perceive_cfg else None,
+        )
+
+        # FieldReceptor (load trained weights if available)
+        receptor_path = config.get("field_receptor", {}).get(
+            "weights_path", "data/fieldreceptor/field_receptor.pt",
+        )
+        self.receptor: FieldReceptorImpl | None = None
+        if Path(receptor_path).exists():
+            self.receptor = FieldReceptorImpl.load(receptor_path)
+            logger.info("FieldReceptor loaded from %s", receptor_path)
+
+        # FieldAwareLLM (lazy load — will be loaded on first use)
+        self.llm: FieldAwareLLM | None = None
+        if ll_cfg.get("use_llm", False):
+            self.llm = FieldAwareLLM(
+                model_name=ll_cfg.get("transformers_model", "Qwen/Qwen3-8B"),
+            )
+
+        # Dialogue manager
         self.dialogue = DialogueManager(
             personality=self.personality,
             field=self.field,
             encoder=self.encoder,
             observer=self.observer,
             db_path=ll_cfg["dialogue_db_path"],
+            receptor=self.receptor,
+            llm=self.llm,
+            perceive_params=self.perceive_params,
             sense_params=self.sense_params,
             use_llm=ll_cfg.get("use_llm", False),
             ollama_model=ll_cfg.get("ollama_model", "qwen3:8b"),
-            self_awareness_query=ll_cfg.get("self_awareness_query", "自分の現在の知識状態"),
             metrics_enabled=metrics_cfg.get("enabled", False),
             max_conversation_history=ll_cfg.get("max_conversation_history", 10),
         )
@@ -168,6 +201,16 @@ class Orchestrator:
             self._sensory_vision.clear()
         self.state = SystemState.SLEEPING
 
+        # 1b. Unload FieldAwareLLM to free VRAM for SleepyJean (Ollama)
+        if self.llm is not None and self.llm.is_loaded():
+            self.llm.unload()
+            logger.info("FieldAwareLLM unloaded for sleep cycle (VRAM freed for Ollama)")
+
+        # 1c. Wait for Ollama to be reachable (needed by sleep_ingest + night cycle)
+        if not await self._wait_for_ollama(timeout=30):
+            logger.error("Ollama not reachable — sleep cycle may fail")
+            print("[SLEEPING] WARNING: Ollama not reachable")
+
         # 2. Run sleep_ingest (timeout: 5 min)
         try:
             ingest_result = await asyncio.wait_for(
@@ -210,6 +253,8 @@ class Orchestrator:
                         knowledge_index_path=self.sj_ki_path,
                         knowledge_index_backup_path=self.sj_ki_backup,
                         night_result_dir=self.sj_training_dir,
+                        db_path=self.sj_db_path,
+                        llamarcute_db_path=self.dialogue.db_path,
                     ),
                     timeout=300,
                 )
@@ -231,7 +276,18 @@ class Orchestrator:
             logger.error("Night cycle execution failed: %s", e)
             print(f"[SLEEPING] Night cycle ERROR: {e}")
 
-        # 5. Self-improvement (Phase 2) — with overall timeout
+        # 5. Free Ollama VRAM, then reload FieldAwareLLM for self-improvement
+        await self._unload_ollama()
+
+        if self.llm is not None:
+            try:
+                self.llm.load()
+                logger.info("FieldAwareLLM reloaded for self-improvement cycle")
+            except Exception as e:
+                logger.error("FieldAwareLLM reload failed: %s — skipping self-improvement", e)
+                print(f"[SLEEPING] FieldAwareLLM reload failed: {e}")
+
+        # 5b. Self-improvement (Phase 2) — with overall timeout
         si_timeout = self.config.get("self_improvement", {}).get("timeout_sec", 1800)
         try:
             await asyncio.wait_for(
@@ -254,6 +310,52 @@ class Orchestrator:
 
         # 7. Wake up
         await self.wake_up()
+
+    async def _unload_ollama(self) -> None:
+        """Ask Ollama to unload all models, freeing VRAM."""
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Generate with keep_alive=0 triggers model unload
+                async with session.post(
+                    "http://localhost:11434/api/generate",
+                    json={"model": "qwen3:8b", "keep_alive": 0},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status == 200:
+                        logger.info("Ollama model unloaded (VRAM freed)")
+                    else:
+                        logger.warning("Ollama unload returned status %d", resp.status)
+        except Exception as e:
+            logger.warning("Ollama unload failed: %s (may already be free)", e)
+
+        # Wait briefly for VRAM to actually free
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            await asyncio.sleep(2)
+
+    async def _wait_for_ollama(self, timeout: int = 30) -> bool:
+        """Poll Ollama health endpoint until reachable or timeout."""
+        import aiohttp
+
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "http://localhost:11434/api/tags",
+                        timeout=aiohttp.ClientTimeout(total=3),
+                    ) as resp:
+                        if resp.status == 200:
+                            logger.info("Ollama is reachable")
+                            return True
+            except (aiohttp.ClientError, TimeoutError):
+                pass
+            await asyncio.sleep(2)
+
+        return False
 
     async def _run_night_cycle(self) -> int:
         """Run SleepyJean's night_cycle.py as a subprocess."""
@@ -378,7 +480,8 @@ class Orchestrator:
             max_changes=max_changes,
             field=self.field,
             encoder=self.encoder,
-            ollama_model=ollama_model,
+            llm=self.llm,
+            receptor=self.receptor,
         )
 
         min_candidates = si_cfg.get("min_candidates_for_eval", 2)
@@ -405,22 +508,21 @@ class Orchestrator:
         with open(cuteness_topics_path) as f:
             cuteness_topics = json.load(f)
 
-        # Retrieve rotation tasks from field (by context filter, not cosine similarity)
-        snap = await self.field.snapshot()
-        rot_signals = sorted(
-            [s for s in snap.signals if s.origin.context == "rotation_task" and s.extra.get("output")],
-            key=lambda s: s.emitted_at,
-            reverse=True,
-        )[:8]
+        # Retrieve rotation tasks from SQLite (direct transfer, not via field)
         rotation_tasks = []
-        for sig in rot_signals:
-            instruction = sig.extra.get("instruction", sig.trace.replace("Q&A: ", "", 1))
-            output = sig.extra.get("output", "")
-            if instruction and output:
-                rotation_tasks.append({
-                    "instruction": instruction,
-                    "output": output,
-                })
+        try:
+            async with aiosqlite.connect(self.dialogue.db_path) as db:
+                db.row_factory = aiosqlite.Row
+                cursor = await db.execute(
+                    "SELECT instruction, output FROM rotation_tasks ORDER BY id DESC LIMIT 8"
+                )
+                rows = await cursor.fetchall()
+                rotation_tasks = [
+                    {"instruction": row["instruction"], "output": row["output"]}
+                    for row in rows
+                ]
+        except Exception as e:
+            logger.warning("Failed to load rotation tasks from SQLite: %s", e)
 
         logger.info(
             "Self-improvement: %d core tasks, %d rotation tasks",
@@ -439,12 +541,22 @@ class Orchestrator:
             ollama_parallel=ollama_parallel,
         )
 
-        # 5. Evaluate cuteness
+        # 5. Evaluate cuteness (with field perception)
         print("[SLEEPING] self_improvement: Evaluating cuteness...")
+        cuteness_field_embs = None
+        if self.receptor is not None:
+            perception = await self.field.perceive(PerceiveParams())
+            if perception.signals:
+                cuteness_field_embs = self.receptor.transduce(
+                    [ps.signal.embedding for ps in perception.signals],
+                    [ps.strength for ps in perception.signals],
+                )
         cuteness_result = await evaluate_cuteness(
             candidates=all_candidates,
             topics=cuteness_topics,
             ollama_model=ollama_model,
+            llm=self.llm,
+            field_embeddings=cuteness_field_embs,
         )
         cuteness_scores = cuteness_result["scores"]
         cuteness_conversation_logs = cuteness_result.get("conversation_logs", {})
@@ -461,6 +573,7 @@ class Orchestrator:
             encoder=self.encoder,
             fitness_weight=si_cfg.get("fitness_weight", 0.75),
             cuteness_weight=si_cfg.get("cuteness_weight", 0.25),
+            db_path=self.dialogue.db_path,
         )
 
         if result["personality_updated"]:
@@ -518,6 +631,7 @@ class Orchestrator:
                     backup_dir,
                     self.field,
                     self.encoder,
+                    db_path=self.dialogue.db_path,
                 )
                 if repair_result.get("personality_rolled_back"):
                     self.personality = Personality.load(personality_path)

@@ -17,10 +17,13 @@ import aiosqlite
 import numpy as np
 
 from shared_state.backends.chromadb_backend import ChromaDBField
+from shared_state.emit_log import ensure_emit_log_table, insert_emit_log
 from shared_state.encoder import E5SmallEncoder
-from shared_state.interface import SenseParams, Signal, SignalOrigin
+from shared_state.field_receptor import FieldReceptorImpl
+from shared_state.interface import PerceiveParams, SenseParams, Signal, SignalOrigin
 from shared_state.observer import LoggingObserver
 
+from llamarcute_live.llm_inference import FieldAwareLLM
 from llamarcute_live.personality import Personality
 
 logger = logging.getLogger(__name__)
@@ -43,10 +46,12 @@ class DialogueManager:
         encoder: E5SmallEncoder,
         observer: LoggingObserver,
         db_path: str | Path,
+        receptor: FieldReceptorImpl | None = None,
+        llm: FieldAwareLLM | None = None,
+        perceive_params: PerceiveParams | None = None,
         sense_params: SenseParams | None = None,
         use_llm: bool = False,
         ollama_model: str = "qwen3:8b",
-        self_awareness_query: str = "自分の現在の知識状態",
         metrics_enabled: bool = False,
         max_conversation_history: int = 10,
     ) -> None:
@@ -55,10 +60,12 @@ class DialogueManager:
         self.encoder = encoder
         self.observer = observer
         self.db_path = Path(db_path)
+        self.receptor = receptor
+        self.llm = llm
+        self.perceive_params = perceive_params or PerceiveParams()
         self.sense_params = sense_params or SenseParams()
         self.use_llm = use_llm
         self.ollama_model = ollama_model
-        self._self_awareness_query = self_awareness_query
         self._metrics_enabled = metrics_enabled
         self._active = asyncio.Event()
         self._active.set()
@@ -81,7 +88,16 @@ class DialogueManager:
                 CREATE INDEX IF NOT EXISTS idx_dialogue_created
                 ON dialogue_log(created_at)
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS rotation_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    instruction TEXT NOT NULL,
+                    output TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
             await db.commit()
+        await ensure_emit_log_table(self.db_path)
 
     async def save_log(self, role: str, content: str) -> None:
         async with aiosqlite.connect(self.db_path) as db:
@@ -104,41 +120,31 @@ class DialogueManager:
             rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
-    async def sense_field(self, user_input: str) -> tuple[list, list]:
-        """Perform two sense operations: self-awareness + dialogue context.
+    async def perceive_field(self):
+        """Perceive the field and transform signals via FieldReceptor.
 
-        Returns (self_awareness_traces, context_traces).
+        Returns field_embeddings (K, 4096) or None if no receptor/signals.
         """
-        # Self-awareness query
-        self_query = self.encoder.encode_for_sense(self._self_awareness_query)
-        self_reading = await self.field.sense(self_query, self.sense_params)
+        import numpy as np
+
+        if self.receptor is None:
+            return None
+
+        perception = await self.field.perceive(self.perceive_params)
         if self.observer:
-            self.observer.on_sense(self_reading, self._self_awareness_query)
+            self.observer.on_perceive(perception)
 
-        # Record sense metrics (T8: individuality experiment 3)
-        if self._metrics_enabled:
-            try:
-                from llamarcute_live.metrics import record_sense_result
-                await record_sense_result(
-                    self.db_path, "self_awareness", self_reading.signals,
-                )
-            except Exception as e:
-                logger.error("Failed to record sense metrics: %s", e)
+        if not perception.signals:
+            return None
 
-        # Dialogue context query
-        ctx_query = self.encoder.encode_for_sense(user_input)
-        ctx_reading = await self.field.sense(ctx_query, self.sense_params)
-        if self.observer:
-            self.observer.on_sense(ctx_reading, user_input)
+        field_embeddings = self.receptor.transduce(
+            [ps.signal.embedding for ps in perception.signals],
+            [ps.strength for ps in perception.signals],
+        )
+        return field_embeddings
 
-        self_traces = [ws.signal.trace for ws in self_reading.signals]
-        ctx_traces = [ws.signal.trace for ws in ctx_reading.signals]
-        return self_traces, ctx_traces
-
-    def build_prompt(
-        self, user_input: str, self_traces: list[str], ctx_traces: list[str],
-    ) -> str:
-        """Build the full prompt with personality, self-awareness, and context."""
+    def build_prompt(self) -> str:
+        """Build system prompt with personality and conversation history."""
         sections = []
         sections.append("あなたは以下の行動規範に従うAIです。")
         sections.append("")
@@ -150,18 +156,6 @@ class DialogueManager:
         sections.append("## 行動規範")
         sections.append(self.personality.to_prompt_section())
 
-        if self_traces:
-            sections.append("## 自己認識（共有状態の場から取得）")
-            for t in self_traces[:5]:
-                sections.append(f"- {t}")
-            sections.append("")
-
-        if ctx_traces:
-            sections.append("## 最近の記憶（共有状態の場から取得）")
-            for t in ctx_traces[:5]:
-                sections.append(f"- {t}")
-            sections.append("")
-
         history_text = self._format_history()
         if history_text:
             sections.append("## 直近の会話")
@@ -171,17 +165,26 @@ class DialogueManager:
         system_prompt = "\n".join(sections)
         return system_prompt
 
-    async def generate_response(self, user_input: str, system_prompt: str) -> str:
-        """Generate response. Phase 1a: mock. Phase 1b: LLM via Ollama."""
+    async def generate_response(self, user_input: str, system_prompt: str,
+                                field_embeddings=None) -> str:
+        """Generate response via FieldAwareLLM (with field injection) or Ollama fallback."""
         if not self.use_llm:
             return f"[mock] あなたの入力: 「{user_input}」を受け取りました。何か気になることある？"
 
-        from llamarcute_live.ollama_client import chat
-        response, duration = await chat(
-            system_prompt=system_prompt,
-            user_message=user_input,
-            model=self.ollama_model,
-        )
+        if self.llm is not None:
+            response, duration = await self.llm.generate_with_field(
+                system_prompt=system_prompt,
+                user_input=user_input,
+                field_embeddings=field_embeddings,
+            )
+        else:
+            # Fallback to Ollama (no field injection)
+            from llamarcute_live.ollama_client import chat
+            response, duration = await chat(
+                system_prompt=system_prompt,
+                user_message=user_input,
+                model=self.ollama_model,
+            )
 
         if response is None:
             logger.warning("LLM response was None, returning error message")
@@ -201,9 +204,9 @@ class DialogueManager:
         signal = Signal.create(
             embedding=embedding,
             origin=DIALOGUE_ORIGIN,
-            trace=summary,
         )
         await self.field.emit(signal)
+        await insert_emit_log(self.db_path, signal.signal_id, summary)
 
     async def emit_difficulty(self, description: str) -> None:
         """Emit a difficulty signal to the shared field."""
@@ -214,19 +217,19 @@ class DialogueManager:
         signal = Signal.create(
             embedding=embedding,
             origin=DIFFICULTY_ORIGIN,
-            trace=text,
         )
         await self.field.emit(signal)
+        await insert_emit_log(self.db_path, signal.signal_id, text)
 
     async def process_input(self, user_input: str) -> str:
-        """Full dialogue turn: sense → prompt → respond → emit → log."""
+        """Full dialogue turn: perceive → prompt → respond → emit → log."""
         await self.save_log("user", user_input)
 
-        self_traces, ctx_traces = await self.sense_field(user_input)
-        system_prompt = self.build_prompt(user_input, self_traces, ctx_traces)
+        field_embeddings = await self.perceive_field()
+        system_prompt = self.build_prompt()
 
         logger.debug("System prompt:\n%s", system_prompt)
-        response = await self.generate_response(user_input, system_prompt)
+        response = await self.generate_response(user_input, system_prompt, field_embeddings)
 
         if response != ERROR_RESPONSE:
             await self.emit_experience(user_input, response)

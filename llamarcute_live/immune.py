@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from shared_state.backends.chromadb_backend import ChromaDBField
+from shared_state.emit_log import insert_emit_log
 from shared_state.encoder import E5SmallEncoder
 from shared_state.interface import (
     PurgeCriteria,
@@ -33,7 +34,8 @@ from llamarcute_live.personality import Personality
 
 logger = logging.getLogger(__name__)
 
-IMMUNE_ORIGIN = SignalOrigin(system="llamarcute_live", context="immune")
+IMMUNE_ROLLBACK_ORIGIN = SignalOrigin(system="llamarcute_live", context="immune:rollback")
+IMMUNE_CONSERVATIVE_ORIGIN = SignalOrigin(system="llamarcute_live", context="immune:conservative_mode")
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +303,7 @@ async def execute_repair(
     backup_dir: Path,
     field: ChromaDBField,
     encoder: E5SmallEncoder,
+    db_path: str | Path | None = None,
 ) -> dict:
     """Execute repair actions based on anomaly report severity.
 
@@ -346,16 +349,18 @@ async def execute_repair(
             )
 
             # 2. Emit rollback record to field
-            trace = (
+            emit_text = (
                 f"personality_rollback from v{current_personality.version} "
                 f"to backup {good_backup.name}"
             )
-            embedding = encoder.encode_for_emit(trace)
+            embedding = encoder.encode_for_emit(emit_text)
             embedding = embedding * 2.5  # high norm for visibility
             signal = Signal.create(
-                embedding=embedding, origin=IMMUNE_ORIGIN, trace=trace,
+                embedding=embedding, origin=IMMUNE_ROLLBACK_ORIGIN,
             )
             await field.emit(signal)
+            if db_path:
+                await insert_emit_log(db_path, signal.signal_id, emit_text)
             result["actions"].append("Emitted rollback record to field")
 
             # 3. Purge stale self_improvement signals
@@ -374,24 +379,28 @@ async def execute_repair(
             result["actions"].append("No valid backup for rollback")
 
         # 4. Emit conservative_mode signal
-        trace = "conservative_mode: CRITICAL anomaly detected, forcing max_changes=1"
-        embedding = encoder.encode_for_emit(trace)
+        emit_text = "conservative_mode: CRITICAL anomaly detected, forcing max_changes=1"
+        embedding = encoder.encode_for_emit(emit_text)
         embedding = embedding * 2.0
         signal = Signal.create(
-            embedding=embedding, origin=IMMUNE_ORIGIN, trace=trace,
+            embedding=embedding, origin=IMMUNE_CONSERVATIVE_ORIGIN,
         )
         await field.emit(signal)
+        if db_path:
+            await insert_emit_log(db_path, signal.signal_id, emit_text)
         result["actions"].append("Emitted conservative_mode signal")
 
     elif report.severity == AnomalySeverity.WARNING and non_retain_anomalies:
         # Only emit conservative_mode for non-retain warnings
-        trace = "conservative_mode: WARNING anomaly detected, forcing max_changes=1"
-        embedding = encoder.encode_for_emit(trace)
+        emit_text = "conservative_mode: WARNING anomaly detected, forcing max_changes=1"
+        embedding = encoder.encode_for_emit(emit_text)
         embedding = embedding * 1.5
         signal = Signal.create(
-            embedding=embedding, origin=IMMUNE_ORIGIN, trace=trace,
+            embedding=embedding, origin=IMMUNE_CONSERVATIVE_ORIGIN,
         )
         await field.emit(signal)
+        if db_path:
+            await insert_emit_log(db_path, signal.signal_id, emit_text)
         result["actions"].append("Emitted conservative_mode signal")
         logger.warning(
             "IMMUNE WARNING: %d anomalies detected, conservative mode activated",

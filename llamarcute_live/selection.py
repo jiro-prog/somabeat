@@ -15,6 +15,7 @@ from typing import NamedTuple
 import numpy as np
 
 from shared_state.backends.chromadb_backend import ChromaDBField
+from shared_state.emit_log import insert_emit_log
 from shared_state.encoder import E5SmallEncoder
 from shared_state.interface import Signal, SignalOrigin
 
@@ -84,6 +85,7 @@ async def select_and_update(
     encoder: E5SmallEncoder,
     fitness_weight: float = 0.75,
     cuteness_weight: float = 0.25,
+    db_path: str | Path | None = None,
 ) -> dict:
     """Select the best candidate and update personality if a mutation wins.
 
@@ -127,7 +129,7 @@ async def select_and_update(
             "[SELF_IMPROVE] v%d→v%d: rules %d→%d, tokens %d→%d, changes: no update (current best)",
             old_ver, old_ver, old_count, old_count, old_tokens, old_tokens,
         )
-        trace = (
+        emit_text = (
             f"自己改善: 現行人格が最良。変更なし。"
             f" ルール数 {old_count}, fitness {winner.integrated:.2f}"
         )
@@ -146,9 +148,6 @@ async def select_and_update(
 
             # Summarize change types
             add_count = modify_count = delete_count = 0
-            for c in candidates:
-                if c.id == winner.id:
-                    break
             # Count changes by comparing rule sets
             # Use a simple heuristic: diff in rule count + structure
             diff = new_count - old_count
@@ -169,7 +168,7 @@ async def select_and_update(
                 old_tokens, new_tokens,
                 add_count, modify_count, delete_count,
             )
-            trace = (
+            emit_text = (
                 f"自己改善: v{old_ver}→v{new_ver}, "
                 f"ルール数 {old_count}→{new_count}, "
                 f"fitness {winner.integrated:.2f}, "
@@ -177,16 +176,17 @@ async def select_and_update(
             )
         else:
             logger.error("Winner %s not found in candidates", winner.id)
-            trace = f"自己改善: 勝者 {winner.id} が候補に見つからず。変更なし。"
+            emit_text = f"自己改善: 勝者 {winner.id} が候補に見つからず。変更なし。"
 
     # Emit result to the shared field
-    embedding = encoder.encode_for_emit(trace)
+    embedding = encoder.encode_for_emit(emit_text)
     signal = Signal.create(
         embedding=embedding,
         origin=SELF_IMPROVE_ORIGIN,
-        trace=trace,
     )
     await field.emit(signal)
+    if db_path:
+        await insert_emit_log(db_path, signal.signal_id, emit_text)
 
     return {
         "winner_id": winner.id,

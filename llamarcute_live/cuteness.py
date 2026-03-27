@@ -15,7 +15,11 @@ import logging
 import random
 import re
 
+from numpy.typing import NDArray
+import numpy as np
+
 from llamarcute_live import ollama_client
+from llamarcute_live.llm_inference import FieldAwareLLM
 from llamarcute_live.personality import Personality
 
 logger = logging.getLogger(__name__)
@@ -70,7 +74,9 @@ async def run_conversation(
     personality_a: Personality,
     personality_b: Personality,
     topic: dict,
-    ollama_model: str,
+    ollama_model: str = "",
+    llm: FieldAwareLLM | None = None,
+    field_embeddings: NDArray[np.float32] | None = None,
 ) -> list[dict]:
     """Run a multi-turn Japanese conversation between two personalities.
 
@@ -82,41 +88,53 @@ async def run_conversation(
         (personality_b, personality_a),
     ])
 
-    # Message histories per participant
-    messages = {
-        first.id: [
-            {"role": "system", "content": _build_conversation_system_prompt(first)},
-        ],
-        second.id: [
-            {"role": "system", "content": _build_conversation_system_prompt(second)},
-        ],
-    }
-
     log: list[dict] = []
+    # Track conversation history per speaker for context
+    history: dict[str, list[str]] = {first.id: [], second.id: []}
 
     for turn in range(CONVERSATION_TURNS):
         for i, speaker in enumerate([first, second]):
+            system_prompt = _build_conversation_system_prompt(speaker)
+
             if turn == 0 and i == 0:
                 user_msg = f"テーマ: {topic['prompt']}\n\n会話を始めてください。"
             else:
                 last_content = log[-1]["content"]
                 user_msg = f'相手のAIが言いました: 「{last_content}」\n\n会話を続けてください。'
 
-            messages[speaker.id].append({"role": "user", "content": user_msg})
+            # Include prior turns in user message
+            if history[speaker.id]:
+                prior = "\n".join(history[speaker.id])
+                user_msg = f"これまでの会話:\n{prior}\n\n{user_msg}"
 
             try:
-                content, _ = await ollama_client.chat_messages(
-                    messages=messages[speaker.id],
-                    model=ollama_model,
-                    max_tokens=MAX_TOKENS_PER_TURN,
-                )
+                if llm is not None:
+                    content, _ = await llm.generate_with_field(
+                        system_prompt=system_prompt,
+                        user_input=user_msg,
+                        field_embeddings=field_embeddings,
+                        max_new_tokens=MAX_TOKENS_PER_TURN,
+                    )
+                else:
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_msg},
+                    ]
+                    content, _ = await ollama_client.chat_messages(
+                        messages=messages,
+                        model=ollama_model,
+                        max_tokens=MAX_TOKENS_PER_TURN,
+                    )
                 if content is None:
                     content = "(応答なし)"
             except Exception as e:
                 logger.error("Conversation error for %s: %s", speaker.id, e)
                 content = "(応答なし)"
 
-            messages[speaker.id].append({"role": "assistant", "content": content})
+            history[speaker.id].append(f"あなた: {content}")
+            other_id = second.id if speaker.id == first.id else first.id
+            history[other_id].append(f"相手: {content}")
+
             log.append({
                 "speaker_id": speaker.id,
                 "content": content,
@@ -290,6 +308,8 @@ async def evaluate_cuteness(
     topics: list[dict],
     ollama_model: str = "qwen3:8b",
     timeout_sec: int = 600,
+    llm: FieldAwareLLM | None = None,
+    field_embeddings: NDArray[np.float32] | None = None,
 ) -> dict[str, float]:
     """Run cuteness evaluation for all candidates.
 
@@ -301,14 +321,17 @@ async def evaluate_cuteness(
 
     Returns {"scores": {personality_id: total_cuteness_points}, "conversation_logs": {...}}.
     """
-    # Pre-check: is Ollama reachable?
-    if not await ollama_client.check_health():
-        logger.error("Ollama health check failed — skipping cuteness evaluation")
-        return {"scores": {c.id: 0.0 for c in candidates}, "conversation_logs": {}}
+    if llm is None:
+        # Fallback: Ollama health check
+        if not await ollama_client.check_health():
+            logger.error("Ollama health check failed — skipping cuteness evaluation")
+            return {"scores": {c.id: 0.0 for c in candidates}, "conversation_logs": {}}
 
     try:
         return await asyncio.wait_for(
-            _evaluate_cuteness_inner(candidates, topics, ollama_model),
+            _evaluate_cuteness_inner(
+                candidates, topics, ollama_model, llm=llm, field_embeddings=field_embeddings,
+            ),
             timeout=timeout_sec,
         )
     except asyncio.TimeoutError:
@@ -320,6 +343,8 @@ async def _evaluate_cuteness_inner(
     candidates: list[Personality],
     topics: list[dict],
     ollama_model: str,
+    llm: FieldAwareLLM | None = None,
+    field_embeddings: NDArray[np.float32] | None = None,
 ) -> dict[str, float]:
     """Inner implementation of cuteness evaluation."""
     n = len(candidates)
@@ -343,6 +368,7 @@ async def _evaluate_cuteness_inner(
         )
         log = await run_conversation(
             candidates[i], candidates[j], topic, ollama_model,
+            llm=llm, field_embeddings=field_embeddings,
         )
         conversation_logs[(i, j)] = {"log": log, "topic": topic["prompt"]}
 
@@ -385,12 +411,20 @@ async def _evaluate_cuteness_inner(
         system_prompt, user_prompt = _build_scoring_prompt(candidate, partner_convs)
 
         try:
-            response, _ = await ollama_client.chat(
-                system_prompt=system_prompt,
-                user_message=user_prompt,
-                model=ollama_model,
-                timeout_sec=60,
-            )
+            if llm is not None:
+                response, _ = await llm.generate_with_field(
+                    system_prompt=system_prompt,
+                    user_input=user_prompt,
+                    field_embeddings=field_embeddings,
+                    max_new_tokens=300,
+                )
+            else:
+                response, _ = await ollama_client.chat(
+                    system_prompt=system_prompt,
+                    user_message=user_prompt,
+                    model=ollama_model,
+                    timeout_sec=60,
+                )
 
             if response is None:
                 # Fallback: even distribution

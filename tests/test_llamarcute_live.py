@@ -119,7 +119,7 @@ class TestDialogueManager:
     def test_build_prompt_has_immutable_constraints(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dm, _ = _make_dialogue_manager(tmpdir)
-            prompt = dm.build_prompt("test", [], [])
+            prompt = dm.build_prompt()
             assert "不変制約" in prompt
             assert "日本語で応答すること" in prompt
             assert "2000文字" in prompt
@@ -127,7 +127,7 @@ class TestDialogueManager:
     def test_build_prompt_immutable_before_behavioral(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dm, _ = _make_dialogue_manager(tmpdir)
-            prompt = dm.build_prompt("test", [], [])
+            prompt = dm.build_prompt()
             immutable_pos = prompt.index("## 不変制約")
             behavioral_pos = prompt.index("## 行動規範")
             assert immutable_pos < behavioral_pos

@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from shared_state.backends.chromadb_backend import ChromaDBField
-from shared_state.interface import Signal, SignalOrigin
+from shared_state.interface import PerceiveParams, Signal, SignalOrigin
 from shared_state.observer import LoggingObserver
 
 
@@ -45,6 +45,21 @@ async def _setup_llamarcute_db(db_path):
             )
         """)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_dialogue_created ON dialogue_log(created_at)")
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS emit_log (
+                signal_id TEXT PRIMARY KEY,
+                context TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS rotation_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                instruction TEXT NOT NULL,
+                output TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            )
+        """)
         await db.execute("INSERT INTO dialogue_log (role, content) VALUES ('user', 'こんにちは')")
         await db.execute("INSERT INTO dialogue_log (role, content) VALUES ('assistant', 'やあ！')")
         await db.execute("INSERT INTO dialogue_log (role, content) VALUES ('user', '量子力学って何？')")
@@ -138,7 +153,6 @@ class TestSleepIngest:
                 sig = Signal.create(
                     embedding=encoder.encode_for_emit("difficult topic"),
                     origin=SignalOrigin(system="llamarcute_live", context="difficulty"),
-                    trace="quantum entanglement was hard",
                 )
                 await field.emit(sig)
 
@@ -191,7 +205,6 @@ class TestSleepIngest:
                 old_sig = Signal.create(
                     embedding=encoder.encode_for_emit("old difficulty"),
                     origin=SignalOrigin(system="llamarcute_live", context="difficulty"),
-                    trace="old problem from 2 days ago",
                 )
                 await field.emit(old_sig)
 
@@ -202,7 +215,6 @@ class TestSleepIngest:
                     metadatas=[{
                         "origin_system": "llamarcute_live",
                         "origin_context": "difficulty",
-                        "trace": "old problem from 2 days ago",
                         "emitted_at": old_time,
                         "norm": 1.0,
                     }],
@@ -212,7 +224,6 @@ class TestSleepIngest:
                 new_sig = Signal.create(
                     embedding=encoder.encode_for_emit("new difficulty"),
                     origin=SignalOrigin(system="llamarcute_live", context="difficulty"),
-                    trace="recent problem from today",
                 )
                 await field.emit(new_sig)
 
@@ -230,7 +241,8 @@ class TestSleepIngest:
                     cursor = await db.execute("SELECT theme FROM homework")
                     rows = await cursor.fetchall()
                     assert len(rows) == 1
-                    assert "recent" in rows[0][0]
+                    # T1: theme is now signal_id-based (difficulty:<id>)
+                    assert rows[0][0].startswith("difficulty:")
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -261,7 +273,6 @@ class TestSleepIngest:
                     sig = Signal.create(
                         embedding=emb,
                         origin=SignalOrigin(system="sleepyjean", context="knowledge_update"),
-                        trace=f"トピック「difficult topic {i}」を新たに学習した",
                     )
                     await field.emit(sig)
 
@@ -270,7 +281,6 @@ class TestSleepIngest:
                     sig = Signal.create(
                         embedding=encoder.encode_for_emit(f"difficulty {i}"),
                         origin=SignalOrigin(system="llamarcute_live", context="difficulty"),
-                        trace=f"difficulty signal {i}",
                     )
                     await field.emit(sig)
 
@@ -440,7 +450,6 @@ class TestSelectRotationQA:
     def test_emit_qa_pairs_stores_output_in_extra(self):
         """Q&A signals should store instruction and output in signal.extra."""
         from bridge.wake_export import _emit_qa_pairs
-        from shared_state.interface import SenseParams
 
         async def run():
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -458,12 +467,11 @@ class TestSelectRotationQA:
                 count = await _emit_qa_pairs(field, encoder, tmpdir, max_qa=8)
                 assert count == 1
 
-                # Sense and verify extra contains output
-                query = encoder.encode_for_sense("test")
-                reading = await field.sense(query, SenseParams(max_signals=10, min_relevance=0.0))
-                assert len(reading.signals) == 1
+                # Perceive and verify extra contains output
+                perception = await field.perceive(PerceiveParams(max_signals=10, min_strength=0.0))
+                assert len(perception.signals) == 1
 
-                sig = reading.signals[0].signal
+                sig = perception.signals[0].signal
                 assert sig.extra.get("instruction") == "What is Python?"
                 assert sig.extra.get("output") == "A programming language"
 
@@ -485,7 +493,6 @@ class TestPurgePolicy:
             old_signal = Signal.create(
                 embedding=encoder.encode("old data"),
                 origin=SignalOrigin(system="test", context="old"),
-                trace="old signal",
             )
             await field.emit(old_signal)
 
@@ -495,7 +502,6 @@ class TestPurgePolicy:
                 metadatas=[{
                     "origin_system": "test",
                     "origin_context": "old",
-                    "trace": "old signal",
                     "emitted_at": (datetime.now() - timedelta(days=10)).isoformat(),
                     "norm": 1.0,
                 }],
@@ -505,7 +511,6 @@ class TestPurgePolicy:
             new_signal = Signal.create(
                 embedding=encoder.encode("new data"),
                 origin=SignalOrigin(system="test", context="new"),
-                trace="new signal",
             )
             await field.emit(new_signal)
 

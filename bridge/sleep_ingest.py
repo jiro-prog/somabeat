@@ -17,6 +17,7 @@ import aiosqlite
 import numpy as np
 
 from shared_state.backends.chromadb_backend import ChromaDBField
+from shared_state.emit_log import get_emit_log
 from shared_state.encoder import E5SmallEncoder
 
 logger = logging.getLogger(__name__)
@@ -154,7 +155,9 @@ async def _ingest_difficulty_signals(
     homework_added = 0
     async with aiosqlite.connect(sleepyjean_db_path) as db:
         for signal in difficulty_signals:
-            theme = signal.trace
+            # signal_idでllamarcute-liveのemit_logを逆引き
+            log_entry = await get_emit_log(llamarcute_db_path, signal.signal_id)
+            theme = log_entry if log_entry else f"difficulty:{signal.signal_id}"
 
             # Duplicate check: skip if same theme already exists (queued or learned)
             cursor = await db.execute(

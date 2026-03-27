@@ -9,6 +9,8 @@ import json
 import logging
 from datetime import datetime, timedelta
 
+import warnings
+
 import chromadb
 import numpy as np
 from numpy.typing import NDArray
@@ -16,8 +18,11 @@ from numpy.typing import NDArray
 from shared_state.interface import (
     ExponentialDecay,
     FieldObserver,
+    FieldPerception,
     FieldReading,
     FieldSnapshot,
+    PerceiveParams,
+    PerceivedSignal,
     PurgeCriteria,
     PurgeResult,
     SenseParams,
@@ -60,7 +65,6 @@ class ChromaDBField:
         metadata = {
             "origin_system": signal.origin.system,
             "origin_context": signal.origin.context,
-            "trace": signal.trace,
             "emitted_at": signal.emitted_at.strftime(_ISO_FMT),
             "norm": norm,
         }
@@ -70,16 +74,85 @@ class ChromaDBField:
             ids=[signal.signal_id],
             embeddings=[signal.embedding.tolist()],
             metadatas=[metadata],
-            documents=[signal.trace],
+            documents=[""],
         )
         if self._observer:
             self._observer.on_emit(signal)
+
+    async def perceive(
+        self,
+        params: PerceiveParams | None = None,
+    ) -> FieldPerception:
+        if params is None:
+            params = PerceiveParams()
+
+        decay_fn = params.decay_fn or ExponentialDecay()
+        now = datetime.now()
+
+        total = self._collection.count()
+        if total == 0:
+            return FieldPerception(signals=[], perceived_at=now)
+
+        all_data = self._collection.get(include=["embeddings", "metadatas"])
+        perceived: list[PerceivedSignal] = []
+
+        for sid, emb_raw, meta in zip(
+            all_data["ids"], all_data["embeddings"], all_data["metadatas"]
+        ):
+            emitted_at = datetime.strptime(meta["emitted_at"], _ISO_FMT)
+
+            if params.time_horizon and (now - emitted_at) > params.time_horizon:
+                continue
+
+            elapsed = now - emitted_at
+            decay_factor = decay_fn(elapsed)
+            norm = float(meta["norm"])
+            strength = decay_factor * norm
+
+            if strength < params.min_strength:
+                continue
+
+            extra = {}
+            if "extra_json" in meta:
+                try:
+                    extra = json.loads(meta["extra_json"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            signal = Signal(
+                signal_id=sid,
+                embedding=np.array(emb_raw, dtype=np.float32),
+                emitted_at=emitted_at,
+                origin=SignalOrigin(
+                    system=meta["origin_system"],
+                    context=meta["origin_context"],
+                ),
+                extra=extra,
+            )
+            perceived.append(PerceivedSignal(
+                signal=signal,
+                decay_factor=decay_factor,
+                strength=strength,
+            ))
+
+        perceived.sort(key=lambda p: p.strength, reverse=True)
+        perceived = perceived[: params.max_signals]
+
+        perception = FieldPerception(signals=perceived, perceived_at=now)
+        if self._observer:
+            self._observer.on_perceive(perception)
+        return perception
 
     async def sense(
         self,
         query_embedding: NDArray[np.float32],
         params: SenseParams | None = None,
     ) -> FieldReading:
+        warnings.warn(
+            "sense() is deprecated. Use perceive() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if params is None:
             params = SenseParams()
 
@@ -137,7 +210,6 @@ class ChromaDBField:
                     system=meta["origin_system"],
                     context=meta["origin_context"],
                 ),
-                trace=meta["trace"],
                 extra=extra,
             )
             weighted.append(WeightedSignal(
@@ -219,7 +291,6 @@ class ChromaDBField:
                     system=meta["origin_system"],
                     context=meta["origin_context"],
                 ),
-                trace=meta["trace"],
                 extra=extra,
             ))
 

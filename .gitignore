@@ -31,6 +31,14 @@ models/
 config/system.yaml
 .env
 
+# Learned weights required at runtime (override *.pt exclusion)
+!data/vision_phase_b/alpha_*/projection_text.pt
+!data/vision_phase_b/alpha_*/projection_img.pt
+!data/fieldreceptor/field_receptor.pt
+
+# FieldReceptor training/analysis artifacts (regenerable)
+data/fieldreceptor/*.npy
+
 # Vision data (large binaries, training caches, backups)
 data/vision_phase_a/*.npy
 data/vision_phase_b/*.npy

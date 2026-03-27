@@ -58,7 +58,6 @@ class SensoryVision:
         signal = Signal.create(
             embedding=embedding,
             origin=SignalOrigin(system="sensory:vision", context="frame"),
-            trace="[視覚] 画面キャプチャの視覚信号",
         )
         await self._field.emit(signal)
         self._last_embedding = embedding

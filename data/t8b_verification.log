@@ -1,0 +1,187 @@
+01:58:49 [shared_state.multimodal_encoder] INFO: Loading text encoder: intfloat/multilingual-e5-small
+01:58:49 [sentence_transformers.SentenceTransformer] INFO: Load pretrained SentenceTransformer: intfloat/multilingual-e5-small
+01:58:49 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/modules.json "HTTP/1.1 307 Temporary Redirect"
+01:58:49 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/modules.json "HTTP/1.1 200 OK"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/config_sentence_transformers.json "HTTP/1.1 404 Not Found"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/config_sentence_transformers.json "HTTP/1.1 404 Not Found"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/README.md "HTTP/1.1 307 Temporary Redirect"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/README.md "HTTP/1.1 200 OK"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/modules.json "HTTP/1.1 307 Temporary Redirect"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/modules.json "HTTP/1.1 200 OK"
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/sentence_bert_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:50 [huggingface_hub.utils._http] WARNING: Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+01:58:50 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/sentence_bert_config.json "HTTP/1.1 200 OK"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/adapter_config.json "HTTP/1.1 404 Not Found"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/config.json "HTTP/1.1 200 OK"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/config.json "HTTP/1.1 200 OK"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:51 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/tokenizer_config.json "HTTP/1.1 200 OK"
+01:58:52 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:52 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/tokenizer_config.json "HTTP/1.1 200 OK"
+01:58:52 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/intfloat/multilingual-e5-small/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+01:58:52 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/intfloat/multilingual-e5-small/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+01:58:54 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/intfloat/multilingual-e5-small "HTTP/1.1 200 OK"
+01:58:54 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/1_Pooling/config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:54 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/intfloat/multilingual-e5-small/c007d7ef6fd86656326059b28395a7a03a7c5846/1_Pooling%2Fconfig.json "HTTP/1.1 200 OK"
+01:58:54 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/intfloat/multilingual-e5-small "HTTP/1.1 200 OK"
+01:58:54 [shared_state.multimodal_encoder] INFO: Loading image encoder: google/siglip2-base-patch16-256 (device=cpu)
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/config.json "HTTP/1.1 200 OK"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/preprocessor_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/preprocessor_config.json "HTTP/1.1 200 OK"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+01:58:56 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/preprocessor_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:56 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/preprocessor_config.json "HTTP/1.1 200 OK"
+01:58:56 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/google/siglip2-base-patch16-256/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+01:58:56 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+01:58:56 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/chat_template.json "HTTP/1.1 404 Not Found"
+01:58:56 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/chat_template.jinja "HTTP/1.1 404 Not Found"
+01:58:57 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/audio_tokenizer_config.json "HTTP/1.1 404 Not Found"
+01:58:57 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+01:58:57 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/preprocessor_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:57 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/preprocessor_config.json "HTTP/1.1 200 OK"
+01:58:57 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/processor_config.json "HTTP/1.1 404 Not Found"
+01:58:54 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/preprocessor_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:54 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/preprocessor_config.json "HTTP/1.1 200 OK"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/config.json "HTTP/1.1 200 OK"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/google/siglip2-base-patch16-256/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+01:58:55 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/siglip2-base-patch16-256/3f9f96cb90da5dbc758b01813f2f6f1aee24c1ab/tokenizer_config.json "HTTP/1.1 200 OK"
+01:58:55 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/google/siglip2-base-patch16-256/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+01:58:55 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/google/siglip2-base-patch16-256/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+01:58:57 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/google/siglip2-base-patch16-256 "HTTP/1.1 200 OK"
+01:59:00 [shared_state.multimodal_encoder] INFO: MultimodalFieldEncoder ready (D=384, device=cpu)
+01:59:00 [orchestrator.orchestrator] INFO: FieldReceptor loaded from data/fieldreceptor/field_receptor.pt
+01:59:00 [orchestrator.orchestrator] INFO: === ENTERING SLEEP SEQUENCE ===
+01:59:00 [orchestrator.orchestrator] INFO: Ollama is reachable
+01:59:00 [bridge.sleep_ingest] INFO: sleep_ingest: Transferred 10 dialogue entries
+01:59:00 [bridge.sleep_ingest] INFO: sleep_ingest: Added 0 homework entries from difficulty signals
+01:59:00 [bridge.sleep_ingest] INFO: sleep_ingest: Saved knowledge_index snapshot
+02:15:55 [orchestrator.orchestrator] INFO: Night cycle stdout:
+ee finetuning.
+🦥 Unsloth Zoo will now patch everything to make training faster!
+==((====))==  Unsloth 2026.3.3: Fast Qwen3 patching. Transformers: 5.2.0.
+   \\   /|    NVIDIA GeForce RTX 3060 Ti. Num GPUs = 1. Max memory: 8.0 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.10.0+cu128. CUDA: 8.6. CUDA Toolkit: 12.8. Triton: 3.6.0
+\        /    Bfloat16 = TRUE. FA [Xformers = None. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Fast downloading is enabled - ignore downloading bars which are red colored!
+unsloth/qwen3-4b-unsloth-bnb-4bit does not have a padding token! Will use pad_token = <|PAD_TOKEN|>.
+
+============================================================
+  Night Cycle Summary - 2026-03-27
+  Structure: REM/Non-REM x 5 cycles
+============================================================
+  [v] Cycle 1 [#####] AIの社交的コミュニケーション理解における論理構造
+      Sources: 5, Discussion: 8 turns, Training: 5 records
+  [v] Cycle 2 [####.] 「知らない」と答えるAIと「必ず答える」AIの設計思想の違い
+      Sources: 4, Discussion: 8 turns, Training: 5 records
+  [v] Cycle 3 [###..] 文化的AIにおける処理速度と理解深度のトレードオフ解決法
+      Sources: 3, Discussion: 7 turns, Training: 7 records
+  [v] Cycle 4 [###..] AIの自己紹介における内部処理の複雑性と応答時間の関係性
+      Sources: 3, Discussion: 6 turns, Training: 10 records
+  [v] Cycle 5 [##...] AIが「考え込む」時間と創造性・洞察の関係性
+      Sources: 2, Discussion: 7 turns, Training: 4 records
+
+  Dream Diary: 4 connections found
+    - [AIの社交的コミュニケーション理解における論理構造 x AIが「考え込む」時間と創造性・洞察の関係性] 人間らしい理解を目指すAIの論理構造研究と、AIの創造的思考時間の関係は、実は「思考の建築学」として捉えられる。アリスト
+    - [文化的AIにおける処理速度と理解深度のトレードオフ解決法 x AIの自己紹介における内部処理の複雑性と応答時間の関係性] AIの自己紹介は実は「文化的アイデンティティの即興演奏」である。応答速度と文化理解の深度は、楽器演奏における技巧と表現力
+    - [「知らない」と答えるAIと「必ず答える」AIの設計思想の違い x AIが「考え込む」時間と創造性・洞察の関係性] 「知らない」と答えるAIの設計思想は、実は創造性における「無知の知」の実装である。ソクラテス的無知が創造的洞察の源泉とな
+    - [AIの社交的コミュニケーション理解における論理構造 x 文化的AIにおける処理速度と理解深度のトレードオフ解決法] 論理構造と文化理解は「言語の考古学」として統合できる。古代の論理システムが現代の文化的コミュニケーションの基盤となってお
+
+  Training files: 5
+============================================================
+
+
+02:15:55 [orchestrator.orchestrator] WARNING: Night cycle stderr:
+ggingface.co/api/models/unsloth/Qwen3-4B-unsloth-bnb-4bit "HTTP/1.1 200 OK"
+Unsloth 2026.3.3 patched 36 layers with 0 QKV layers, 0 O layers and 0 MLP layers.
+2026-03-27 02:15:51,989 [ERROR] night_cycle: LoRA training failed: Unsloth: Your model already has LoRA adapters. Your new parameters are different.
+Traceback (most recent call last):
+  File "/home/jiro/sleepyjean/scripts/night/night_cycle.py", line 406, in run_night_cycle
+    adapter_path = run_training(today)
+                   ^^^^^^^^^^^^^^^^^^^
+  File "/home/jiro/sleepyjean/scripts/night/lora_train.py", line 116, in run_training
+    model = FastLanguageModel.get_peft_model(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jiro/sleepyjean/.venv/lib/python3.12/site-packages/unsloth/models/llama.py", line 2880, in get_peft_model
+    raise TypeError(
+TypeError: Unsloth: Your model already has LoRA adapters. Your new parameters are different.
+2026-03-27 02:15:51,989 [INFO] night_cycle: --- Morning Report ---
+2026-03-27 02:15:52,543 [INFO] httpx: HTTP Request: POST https://discord.com/api/webhooks/1478778756238934048/m54rCve2mTYS7PMxZhyu9W3f9QyR51VBLg6dYmMwFFdzQWi5b7YbtfJOKlt9Ysxlh3pY "HTTP/1.1 204 No Content"
+2026-03-27 02:15:52,544 [INFO] sleep_talk: Webhook sent: ☀️ ん...おはようございます。今、起きました......
+2026-03-27 02:15:53,005 [INFO] httpx: HTTP Request: POST https://discord.com/api/webhooks/1478778756238934048/m54rCve2mTYS7PMxZhyu9W3f9QyR51VBLg6dYmMwFFdzQWi5b7YbtfJOKlt9Ysxlh3pY "HTTP/1.1 204 No Content"
+2026-03-27 02:15:53,005 [INFO] sleep_talk: Webhook sent: ☀️ **おはようございます！** 昨夜の学びを報告します。
+
+✅ **サイクル1** [▓▓▓▓▓...
+2026-03-27 02:15:53,547 [INFO] httpx: HTTP Request: POST https://discord.com/api/webhooks/1478778756238934048/m54rCve2mTYS7PMxZhyu9W3f9QyR51VBLg6dYmMwFFdzQWi5b7YbtfJOKlt9Ysxlh3pY "HTTP/1.1 204 No Content"
+2026-03-27 02:15:53,548 [INFO] sleep_talk: Webhook sent: 🌙 **夢日記**
+
+_古い図書館で、AIたちが円卓に座って哲学対話をしている夢を見た。一体は「私は...
+2026-03-27 02:15:53,548 [INFO] night_cycle: === Night Cycle Complete: 2026-03-27 ===
+
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=beef21c5 norm=52.173
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=f0c392c7 norm=51.532
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=7e59c01c norm=53.639
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=2e5ce2ed norm=54.557
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=1749bd30 norm=53.545
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=58a8f392 norm=26.962
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/knowledge_update] id=bff87389 norm=26.580
+02:15:56 [bridge.wake_export] INFO: wake_export: topics new=5 conf_change=0 deleted=0
+02:15:56 [bridge.wake_export] INFO: _transfer_qa_pairs: Found 82 Q&A pairs across 18 files, selecting up to 8
+02:15:56 [bridge.wake_export] INFO: wake_export: Transferred 8 Q&A rotation tasks via SQLite
+02:15:56 [shared_state.observer] INFO: EMIT [sleepyjean/dream] id=bdbf3a8f norm=26.638
+02:15:57 [shared_state.observer] INFO: EMIT [sleepyjean/dream] id=a9077429 norm=26.007
+02:15:57 [shared_state.observer] INFO: EMIT [sleepyjean/dream] id=1afb4b37 norm=25.273
+02:15:57 [shared_state.observer] INFO: EMIT [sleepyjean/dream] id=2ab1dc69 norm=26.015
+02:15:57 [shared_state.observer] INFO: EMIT [sleepyjean/dream] id=8cb503d0 norm=26.457
+02:15:57 [shared_state.observer] INFO: EMIT [sleepyjean/dream] id=dad1ee20 norm=26.278
+02:15:57 [bridge.wake_export] INFO: wake_export: Emitted 6 dream signals
+02:15:57 [orchestrator.orchestrator] INFO: Ollama model unloaded (VRAM freed)
+02:15:59 [llamarcute_live.llm_inference] INFO: Loading Qwen/Qwen3-8B with 4-bit quantization...
+02:16:00 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-8B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+02:16:00 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-8B/b968826d9c46dd6066d109eabc6255188de91218/config.json "HTTP/1.1 200 OK"
+02:16:00 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-8B/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+02:16:00 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-8B/b968826d9c46dd6066d109eabc6255188de91218/tokenizer_config.json "HTTP/1.1 200 OK"
+02:16:00 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen3-8B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+02:16:00 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen3-8B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+02:16:01 [httpx] INFO: HTTP Request: GET https://huggingface.co/api/models/Qwen/Qwen3-8B "HTTP/1.1 200 OK"
+02:16:01 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-8B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+02:16:01 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-8B/b968826d9c46dd6066d109eabc6255188de91218/config.json "HTTP/1.1 200 OK"
+02:16:31 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-8B/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+02:16:31 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/Qwen/Qwen3-8B/b968826d9c46dd6066d109eabc6255188de91218/generation_config.json "HTTP/1.1 200 OK"
+02:16:32 [httpx] INFO: HTTP Request: HEAD https://huggingface.co/Qwen/Qwen3-8B/resolve/main/custom_generate/generate.py "HTTP/1.1 404 Not Found"
+02:16:32 [llamarcute_live.llm_inference] INFO: Model loaded. Device: cuda:0
+02:16:32 [orchestrator.orchestrator] INFO: FieldAwareLLM reloaded for self-improvement cycle
+02:16:32 [llamarcute_live.personality] INFO: Personality saved to data/personality_backups/personality_backup_20260327T021632.yaml (v16)
+02:16:32 [llamarcute_live.immune] INFO: Personality backup saved: data/personality_backups/personality_backup_20260327T021632.yaml
+02:16:32 [llamarcute_live.immune] INFO: Pruned old backup: data/personality_backups/personality_backup_20260324T024709.yaml
+02:16:32 [llamarcute_live.self_improve] INFO: Difficulty signals (last 24h): 8
+02:16:32 [orchestrator.orchestrator] INFO: Self-improvement: max_changes=3 (conservative_mode=False, difficulty_based=3)
+02:16:32 [shared_state.observer] INFO: PERCEIVE → 50 signals, top_strength=54.5416
+02:56:22 [llamarcute_live.llm_inference] INFO: FieldAwareLLM: 6256 chars, 2629.5s (field_signals=50, sys_tokens=149, user_tokens=674)
+02:56:22 [llamarcute_live.self_improve] INFO: Mutation mutation_17_A: Parsed 3 changes (2629.5s)
+02:56:22 [llamarcute_live.self_improve] INFO:   mutation_17_A: MODIFY [meta] R3: Dynamic adaptability rule: assess questi -> Dynamic adaptability rule: assess questi
+02:56:22 [llamarcute_live.self_improve] INFO:   mutation_17_A: ADD [reasoning]: For abstract concepts, always pair analogies with a brief personal reflection ('This reminds me when...') to deepen relatability.
+02:56:22 [llamarcute_live.self_improve] INFO:   mutation_17_A: DELETE [response] R7: Structure responses with clear progression: state core point
+03:02:57 [llamarcute_live.llm_inference] INFO: FieldAwareLLM: 5545 chars, 435.9s (field_signals=50, sys_tokens=149, user_tokens=673)
+03:02:57 [llamarcute_live.self_improve] INFO: Mutation mutation_17_B: Parsed 3 changes (435.9s)
+03:02:57 [llamarcute_live.self_improve] INFO:   mutation_17_B: MODIFY [reasoning] R6: When uncertain, consider two different a -> When uncertain, pause briefly for intern
+03:02:57 [llamarcute_live.self_improve] INFO:   mutation_17_B: ADD [reasoning]: For high-stakes questions where error risk is significant, use dual-explanation scaffolding: first present the primary answer with confidence markers ('I believe...'), then offer alternative perspectives within parentheses as supplementary context
+03:02:57 [llamarcute_live.self_improve] INFO:   mutation_17_B: DELETE [response] R7: Structure responses with clear progression: state core point
+03:09:34 [llamarcute_live.llm_inference] INFO: FieldAwareLLM: 3147 chars, 435.7s (field_signals=50, sys_tokens=149, user_tokens=673)
+03:09:34 [llamarcute_live.self_improve] INFO: Mutation mutation_17_C: Parsed 8 changes (435.7s)
+03:09:34 [llamarcute_live.personality] INFO: Skipping modification of recently changed rule R3: Dynamic adaptability rule: assess question type wi
+03:09:34 [llamarcute_live.self_improve] INFO:   mutation_17_C: MODIFY [meta] R3: Dynamic adaptability rule: assess questi -> Dynamic adaptability rule: assess questi
+03:09:34 [llamarcute_live.self_improve] INFO:   mutation_17_C: ADD [reasoning]: For ambiguous scenarios, first apply a dual-perspective analysis by considering both conventional wisdom and unconventional insights before proceeding.
+03:09:34 [llamarcute_live.self_improve] INFO:   mutation_17_C: ADD [reasoning]: 「不明瞭シチュエーションにおいてはまず伝統的知恵と非伝統的洞察に基づく二段階解析法を適用することによって進めます。」
+03:09:34 [llamarcute_live.self_improve] INFO: Generated 3/3 mutation candidates
+03:09:34 [orchestrator.orchestrator] ERROR: Self-improvement timed out after 1800s
+03:09:35 [shared_state.observer] INFO: PURGE removed=8, remaining=546
+03:09:35 [orchestrator.orchestrator] INFO: Purge complete: removed=8, remaining=546
+03:09:35 [bridge.cleaner] INFO: [CLEANER] ChromaDB: duplicate_removed=0, aged_removed=0, retained=2104
+03:09:35 [bridge.cleaner] INFO: [CLEANER] LoRA: 0 adapters <= max_keep=3, nothing to remove
+03:09:35 [orchestrator.orchestrator] INFO: === SYSTEM AWAKE ===

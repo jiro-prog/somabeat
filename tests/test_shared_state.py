@@ -8,24 +8,23 @@ from shared_state.interface import (
     ExponentialDecay,
     FieldReading,
     FieldSnapshot,
+    PerceiveParams,
     PurgeCriteria,
     PurgeResult,
-    SenseParams,
     Signal,
     SignalOrigin,
     WeightedSignal,
 )
 
 
-def _make_signal(trace: str = "test", norm: float = 1.0) -> Signal:
-    seed = hash(trace) % (2**31)
+def _make_signal(label: str = "test", norm: float = 1.0) -> Signal:
+    seed = hash(label) % (2**31)
     rng = np.random.RandomState(seed)
     vec = rng.randn(384).astype(np.float32)
     vec = vec / np.linalg.norm(vec) * norm
     return Signal.create(
         embedding=vec,
         origin=SignalOrigin(system="test", context="unit_test"),
-        trace=trace,
     )
 
 
@@ -86,12 +85,12 @@ class TestWeightedSignal:
         assert abs(ws.effective_weight - expected) < 0.01
 
 
-class TestSenseParams:
+class TestPerceiveParams:
     def test_defaults(self):
-        p = SenseParams()
+        p = PerceiveParams()
         assert p.decay_fn is None
-        assert p.max_signals == 10
-        assert p.min_relevance == 0.1
+        assert p.max_signals == 50
+        assert p.min_strength == 0.1
         assert p.time_horizon is None
 
 

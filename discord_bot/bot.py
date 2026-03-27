@@ -262,7 +262,8 @@ async def _generate_wake_message(orchestrator: Orchestrator) -> str:
             query,
             SenseParams(max_signals=3, time_horizon=timedelta(hours=24)),
         )
-        learnings = [ws.signal.trace for ws in reading.signals[:3]]
+        # T1: trace廃止 — signal_idで識別。T2でemit_logから文脈復元予定。
+        learnings = [ws.signal.signal_id[:8] for ws in reading.signals[:3]]
 
         if not learnings:
             return FALLBACK_WAKE_MESSAGE

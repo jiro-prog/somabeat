@@ -34,7 +34,7 @@ async def verify_sense_after_reencode(field, encoder):
     reading = await field.sense(query, SenseParams(max_signals=10))
     logger.info("Sense returned %d signals", len(reading.signals))
     for ws in reading.signals[:5]:
-        logger.info("  [%.3f] %s: %s", ws.effective_weight, ws.signal.origin.context, ws.signal.trace[:60])
+        logger.info("  [%.3f] %s: %s", ws.effective_weight, ws.signal.origin.context, ws.signal.signal_id[:8])
     assert len(reading.signals) > 0, "sense() returned no signals after re-encode"
     logger.info("C-5a PASS")
 

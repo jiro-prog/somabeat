@@ -18,7 +18,7 @@ import aiosqlite
 import numpy as np
 
 from shared_state.backends.chromadb_backend import ChromaDBField
-from shared_state.interface import SenseParams, Signal, SignalOrigin
+from shared_state.interface import PerceiveParams, Signal, SignalOrigin
 from shared_state.observer import LoggingObserver
 
 from llamarcute_live.dialogue import DialogueManager
@@ -195,15 +195,14 @@ def test_full_cycle_phase_1a():
             # ============================================================
             # CRITERION 6: Post-wake sense includes SleepyJean signals
             # ============================================================
-            query = encoder.encode_for_sense("量子力学について学んだこと")
-            reading = await field.sense(query, SenseParams(max_signals=20, min_relevance=0.0))
+            perception = await field.perceive(PerceiveParams(max_signals=20, min_strength=0.0))
 
             sj_signals = [
-                ws for ws in reading.signals
-                if ws.signal.origin.system == "sleepyjean"
+                ps for ps in perception.signals
+                if ps.signal.origin.system == "sleepyjean"
             ]
-            assert len(sj_signals) >= 1, f"Expected SleepyJean signals in sense, got {len(sj_signals)}"
-            print(f"  [PASS] Criterion 6: sense returned {len(sj_signals)} SleepyJean signal(s)")
+            assert len(sj_signals) >= 1, f"Expected SleepyJean signals in perceive, got {len(sj_signals)}"
+            print(f"  [PASS] Criterion 6: perceive returned {len(sj_signals)} SleepyJean signal(s)")
 
             print("\n=== ALL 6 CRITERIA PASSED — Phase 1a ACCEPTED ===")
 

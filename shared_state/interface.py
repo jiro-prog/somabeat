@@ -39,14 +39,12 @@ class Signal:
     embedding: NDArray[np.float32]   # non-normalized vector
     emitted_at: datetime
     origin: SignalOrigin
-    trace: str                       # human-readable description
     extra: dict = field(default_factory=dict)  # optional metadata (e.g. rotation Q&A output)
 
     @staticmethod
     def create(
         embedding: NDArray[np.float32],
         origin: SignalOrigin,
-        trace: str,
         extra: dict | None = None,
     ) -> Signal:
         return Signal(
@@ -54,7 +52,6 @@ class Signal:
             embedding=embedding,
             emitted_at=datetime.now(),
             origin=origin,
-            trace=trace,
             extra=extra or {},
         )
 
@@ -74,6 +71,30 @@ class FieldReading:
     signals: list[WeightedSignal]
     observed_at: datetime
     query_embedding: NDArray[np.float32]
+
+
+@dataclass
+class PerceiveParams:
+    """Parameters controlling how perceive() reads the field."""
+    decay_fn: DecayFunction | None = None  # None → default ExponentialDecay
+    min_strength: float = 0.1
+    max_signals: int = 50
+    time_horizon: timedelta | None = None  # None → no time cutoff
+
+
+@dataclass(frozen=True)
+class PerceivedSignal:
+    """A signal observed through perceive(), with decay and strength applied."""
+    signal: Signal
+    decay_factor: float
+    strength: float       # decay_factor × ‖embedding‖
+
+
+@dataclass(frozen=True)
+class FieldPerception:
+    """Result of a perceive() operation."""
+    signals: list[PerceivedSignal]   # strength降順
+    perceived_at: datetime
 
 
 @dataclass
@@ -171,6 +192,17 @@ class SharedField(Protocol):
         """Fire-and-forget signal emission into the field."""
         ...
 
+    async def perceive(
+        self,
+        params: PerceiveParams | None = None,
+    ) -> FieldPerception:
+        """Perceive the field — retrieve all signals with decay-based strength.
+
+        Unlike sense(), perceive() does not rank by cosine similarity to a query.
+        It returns all signals above the strength threshold, sorted by strength.
+        """
+        ...
+
     async def sense(
         self,
         query_embedding: NDArray[np.float32],
@@ -216,10 +248,46 @@ class FieldEncoder(Protocol):
 
 
 @runtime_checkable
+class FieldReceptor(Protocol):
+    """Transforms field embeddings into agent-native representations.
+
+    Maps from field embedding space to the agent's internal representation space
+    (e.g. LLM input embedding space).
+    """
+
+    def transduce(
+        self,
+        field_embeddings: list[NDArray[np.float32]],
+        strengths: list[float],
+    ) -> NDArray[np.float32]:
+        """Transform field embeddings into agent-native representation.
+
+        Args:
+            field_embeddings: List of field-space embedding vectors.
+            strengths: Corresponding strength values for scaling.
+
+        Returns:
+            Transformed embeddings in agent-native space.
+        """
+        ...
+
+    def field_dimensionality(self) -> int:
+        """Return the dimensionality of the field embedding space."""
+        ...
+
+    def agent_dimensionality(self) -> int:
+        """Return the dimensionality of the agent's internal space."""
+        ...
+
+
+@runtime_checkable
 class FieldObserver(Protocol):
     """Observer for field operations — used for debugging and monitoring."""
 
     def on_emit(self, signal: Signal) -> None:
+        ...
+
+    def on_perceive(self, perception: FieldPerception) -> None:
         ...
 
     def on_sense(self, reading: FieldReading, query_text: str | None) -> None:

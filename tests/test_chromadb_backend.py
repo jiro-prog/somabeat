@@ -9,8 +9,8 @@ import pytest
 from shared_state.backends.chromadb_backend import ChromaDBField
 from shared_state.interface import (
     ExponentialDecay,
+    PerceiveParams,
     PurgeCriteria,
-    SenseParams,
     Signal,
     SignalOrigin,
 )
@@ -23,11 +23,10 @@ def _vec(norm: float = 1.0, seed: int = 42) -> np.ndarray:
     return v / np.linalg.norm(v) * norm
 
 
-def _signal(trace: str, norm: float = 1.0, context: str = "test", seed: int = 42) -> Signal:
+def _signal(label: str = "test", norm: float = 1.0, context: str = "test", seed: int = 42) -> Signal:
     return Signal.create(
         embedding=_vec(norm=norm, seed=seed),
         origin=SignalOrigin(system="test", context=context),
-        trace=trace,
     )
 
 
@@ -42,35 +41,35 @@ def field():
     )
 
 
-class TestEmitAndSense:
-    def test_emit_then_sense(self, field):
+class TestEmitAndPerceive:
+    def test_emit_then_perceive(self, field):
         s = _signal("hello world", seed=1)
 
         async def run():
             await field.emit(s)
-            reading = await field.sense(s.embedding)
-            assert len(reading.signals) == 1
-            assert reading.signals[0].signal.trace == "hello world"
+            perception = await field.perceive(PerceiveParams(min_strength=0.0))
+            assert len(perception.signals) == 1
+            assert perception.signals[0].signal.signal_id == s.signal_id
 
         asyncio.get_event_loop().run_until_complete(run())
 
-    def test_sense_empty_field(self, field):
+    def test_perceive_empty_field(self, field):
         async def run():
-            reading = await field.sense(_vec())
-            assert len(reading.signals) == 0
+            perception = await field.perceive()
+            assert len(perception.signals) == 0
 
         asyncio.get_event_loop().run_until_complete(run())
 
-    def test_norm_affects_effective_weight(self, field):
+    def test_norm_affects_strength(self, field):
         s_low = _signal("low norm", norm=1.0, seed=10)
         s_high = _signal("high norm", norm=3.0, seed=10)
 
         async def run():
             await field.emit(s_low)
             await field.emit(s_high)
-            reading = await field.sense(s_high.embedding)
-            weights = {ws.signal.trace: ws.effective_weight for ws in reading.signals}
-            assert weights["high norm"] > weights["low norm"]
+            perception = await field.perceive(PerceiveParams(min_strength=0.0))
+            strengths = {ps.signal.signal_id: ps.strength for ps in perception.signals}
+            assert strengths[s_high.signal_id] > strengths[s_low.signal_id]
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -79,9 +78,9 @@ class TestEmitAndSense:
             for i in range(20):
                 await field.emit(_signal(f"sig_{i}", seed=i))
 
-            params = SenseParams(max_signals=5)
-            reading = await field.sense(_vec(seed=0), params=params)
-            assert len(reading.signals) <= 5
+            params = PerceiveParams(max_signals=5, min_strength=0.0)
+            perception = await field.perceive(params)
+            assert len(perception.signals) <= 5
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -118,20 +117,19 @@ class TestSnapshot:
 
 
 class TestSignalExtra:
-    def test_extra_roundtrip_via_sense(self, field):
-        """Signal.extra should survive emit → sense roundtrip."""
+    def test_extra_roundtrip_via_perceive(self, field):
+        """Signal.extra should survive emit → perceive roundtrip."""
         s = Signal.create(
             embedding=_vec(seed=10),
             origin=SignalOrigin(system="test", context="rotation_task"),
-            trace="Q&A: test question",
             extra={"instruction": "test question", "output": "test answer"},
         )
 
         async def run():
             await field.emit(s)
-            reading = await field.sense(s.embedding, SenseParams(max_signals=10, min_relevance=0.0))
-            assert len(reading.signals) == 1
-            sig = reading.signals[0].signal
+            perception = await field.perceive(PerceiveParams(max_signals=10, min_strength=0.0))
+            assert len(perception.signals) == 1
+            sig = perception.signals[0].signal
             assert sig.extra["instruction"] == "test question"
             assert sig.extra["output"] == "test answer"
 
@@ -142,7 +140,6 @@ class TestSignalExtra:
         s = Signal.create(
             embedding=_vec(seed=11),
             origin=SignalOrigin(system="test", context="test"),
-            trace="with extra",
             extra={"key": "value"},
         )
 
@@ -160,9 +157,9 @@ class TestSignalExtra:
 
         async def run():
             await field.emit(s)
-            reading = await field.sense(s.embedding, SenseParams(max_signals=10, min_relevance=0.0))
-            assert len(reading.signals) == 1
-            assert reading.signals[0].signal.extra == {}
+            perception = await field.perceive(PerceiveParams(max_signals=10, min_strength=0.0))
+            assert len(perception.signals) == 1
+            assert perception.signals[0].signal.extra == {}
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -177,11 +174,11 @@ class TestObserver:
         assert len(logs) == 1
         assert "EMIT" in logs[0].summary
 
-    def test_observer_logs_sense(self, field):
+    def test_observer_logs_perceive(self, field):
         async def run():
             await field.emit(_signal("x", seed=1))
-            await field.sense(_vec(seed=1))
+            await field.perceive()
 
         asyncio.get_event_loop().run_until_complete(run())
         logs = field._observer.get_recent_logs()
-        assert any("SENSE" in e.summary for e in logs)
+        assert any("PERCEIVE" in e.summary for e in logs)

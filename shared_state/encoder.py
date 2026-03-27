@@ -27,7 +27,7 @@ class E5SmallEncoder:
 
     def __init__(self, model_name: str = "intfloat/multilingual-e5-small") -> None:
         logger.info("Loading encoder model: %s", model_name)
-        self._model = SentenceTransformer(model_name)
+        self._model = SentenceTransformer(model_name, device="cpu")
         self._dimensionality = 384
 
     def encode(self, text: str) -> NDArray[np.float32]:

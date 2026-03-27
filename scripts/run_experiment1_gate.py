@@ -113,15 +113,16 @@ async def run_experiment(encoder: E5SmallEncoder):
 
     # Emit all signals
     print("[T3] Emitting 9 test signals...")
+    signal_id_map = {}  # signal_id → sig_def
     for sig_def in SIGNAL_SET:
         emb = encoder.encode_for_emit(sig_def["trace"])
         emb = emb * sig_def["norm"]
         signal = Signal.create(
             embedding=emb,
             origin=sig_def["origin"],
-            trace=sig_def["trace"],
         )
         await field.emit(signal)
+        signal_id_map[signal.signal_id] = sig_def
 
     # Sense with each query
     results = {}  # {query_id: {signal_label: effective_weight}}
@@ -135,16 +136,15 @@ async def run_experiment(encoder: E5SmallEncoder):
 
         weights = {}
         for ws in reading.signals:
-            # Match back to signal definition by trace
-            for sig_def in SIGNAL_SET:
-                if ws.signal.trace == sig_def["trace"]:
-                    weights[sig_def["id"]] = {
-                        "label": sig_def["label"],
-                        "effective_weight": ws.effective_weight,
-                        "relevance": ws.relevance,
-                        "rank": len(weights) + 1,
-                    }
-                    break
+            # Match back to signal definition by signal_id
+            sig_def = signal_id_map.get(ws.signal.signal_id)
+            if sig_def:
+                weights[sig_def["id"]] = {
+                    "label": sig_def["label"],
+                    "effective_weight": ws.effective_weight,
+                    "relevance": ws.relevance,
+                    "rank": len(weights) + 1,
+                }
 
         results[q["id"]] = weights
 

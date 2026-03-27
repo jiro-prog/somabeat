@@ -12,7 +12,7 @@ from datetime import datetime
 
 import numpy as np
 
-from shared_state.interface import FieldReading, PurgeResult, Signal
+from shared_state.interface import FieldPerception, FieldReading, PurgeResult, Signal
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +34,22 @@ class LoggingObserver:
         norm = float(np.linalg.norm(signal.embedding))
         summary = (
             f"EMIT [{signal.origin.system}/{signal.origin.context}] "
-            f"norm={norm:.3f} trace=\"{signal.trace[:80]}\""
+            f"id={signal.signal_id[:8]} norm={norm:.3f}"
         )
         logger.info(summary)
         self._buffer.append(ObserverLogEntry(
             timestamp=datetime.now(), event_type="emit", summary=summary,
+        ))
+
+    def on_perceive(self, perception: FieldPerception) -> None:
+        top_strength = perception.signals[0].strength if perception.signals else 0.0
+        summary = (
+            f"PERCEIVE → {len(perception.signals)} signals, "
+            f"top_strength={top_strength:.4f}"
+        )
+        logger.info(summary)
+        self._buffer.append(ObserverLogEntry(
+            timestamp=datetime.now(), event_type="perceive", summary=summary,
         ))
 
     def on_sense(self, reading: FieldReading, query_text: str | None) -> None:

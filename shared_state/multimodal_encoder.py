@@ -45,9 +45,9 @@ class MultimodalFieldEncoder:
         self._device = device
         self._dimensionality = 384
 
-        # Text encoder (e5-small)
+        # Text encoder (e5-small) — CPU to avoid VRAM contention with LLM
         logger.info("Loading text encoder: %s", e5_model_name)
-        self._text_encoder = SentenceTransformer(e5_model_name)
+        self._text_encoder = SentenceTransformer(e5_model_name, device="cpu")
 
         # Image encoder (SigLIP ViT-B vision tower) — CPU to avoid VRAM contention
         logger.info("Loading image encoder: %s (device=%s)", siglip_model_name, device)
@@ -59,10 +59,10 @@ class MultimodalFieldEncoder:
         # Learned projection heads
         self._projection_text = self._load_projection(
             ProjectionText, projection_text_path,
-        )
+        ).to(self._device)
         self._projection_img = self._load_projection(
             ProjectionImg, projection_img_path,
-        )
+        ).to(self._device)
 
         logger.info("MultimodalFieldEncoder ready (D=%d, device=%s)", self._dimensionality, device)
 
@@ -88,7 +88,7 @@ class MultimodalFieldEncoder:
             )
             raw_tensor = torch.tensor(raw, dtype=torch.float32).unsqueeze(0)
             projected = self._projection_text(raw_tensor)
-        return projected.squeeze(0).numpy()
+        return projected.squeeze(0).cpu().numpy()
 
     def encode_for_sense(self, text: str) -> NDArray[np.float32]:
         """Encode text for sensing/querying (query prefix) through projection."""
@@ -98,7 +98,7 @@ class MultimodalFieldEncoder:
             )
             raw_tensor = torch.tensor(raw, dtype=torch.float32).unsqueeze(0)
             projected = self._projection_text(raw_tensor)
-        return projected.squeeze(0).numpy()
+        return projected.squeeze(0).cpu().numpy()
 
     # --- Image encoding ---
 
@@ -109,8 +109,8 @@ class MultimodalFieldEncoder:
             inputs = {k: v.to(self._device) for k, v in inputs.items()}
             outputs = self._vision_model(pixel_values=inputs["pixel_values"])
             img_features = outputs.pooler_output  # (1, 768)
-            projected = self._projection_img(img_features)  # (1, 384)
-        return projected.squeeze(0).numpy()
+            projected = self._projection_img(img_features.to(self._device))  # (1, 384)
+        return projected.squeeze(0).cpu().numpy()
 
     # --- Properties ---
 

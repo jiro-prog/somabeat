@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from shared_state.backends.chromadb_backend import ChromaDBField
+from shared_state.emit_log import insert_emit_log
 from shared_state.encoder import E5SmallEncoder
 from shared_state.interface import Signal, SignalOrigin
 
@@ -32,6 +33,8 @@ async def wake_export(
     knowledge_index_path: str | Path,
     knowledge_index_backup_path: str | Path,
     night_result_dir: str | Path | None = None,
+    db_path: str | Path | None = None,
+    llamarcute_db_path: str | Path | None = None,
 ) -> dict:
     """Export SleepyJean's learning results to the shared field.
 
@@ -44,6 +47,11 @@ async def wake_export(
         "qa_pairs_emitted": 0,
         "dream_signals_emitted": 0,
     }
+
+    # 0. Ensure emit_log table exists in the target DB
+    if db_path:
+        from shared_state.emit_log import ensure_emit_log_table
+        await ensure_emit_log_table(db_path)
 
     # 1. Compare knowledge_index before/after
     try:
@@ -69,11 +77,13 @@ async def wake_export(
         # New topics
         for tid, topic in after_topics.items():
             if tid not in before_topics:
-                trace = f"トピック「{topic['name']}」を新たに学習した"
-                embedding = encoder.encode_for_emit(trace)
+                emit_text = f"トピック「{topic['name']}」を新たに学習した"
+                embedding = encoder.encode_for_emit(emit_text)
                 embedding = embedding * 2.0  # norm 2.0 for new topics
-                signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN, trace=trace)
+                signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN)
                 await field.emit(signal)
+                if db_path:
+                    await insert_emit_log(db_path, signal.signal_id, emit_text)
                 summary["new_topics_emitted"] += 1
 
         # Confidence changes
@@ -83,31 +93,37 @@ async def wake_export(
                 new_conf = topic.get("confidence", 0)
                 delta = new_conf - old_conf
                 if abs(delta) > 0.05:
-                    trace = f"トピック「{topic['name']}」の確信度が {old_conf:.2f}→{new_conf:.2f} に変化"
-                    embedding = encoder.encode_for_emit(trace)
+                    emit_text = f"トピック「{topic['name']}」の確信度が {old_conf:.2f}→{new_conf:.2f} に変化"
+                    embedding = encoder.encode_for_emit(emit_text)
                     norm_scale = 1.0 + abs(delta) * 5  # proportional to change
                     embedding = embedding * norm_scale
-                    signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN, trace=trace)
+                    signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN)
                     await field.emit(signal)
+                    if db_path:
+                        await insert_emit_log(db_path, signal.signal_id, emit_text)
                     summary["confidence_changes_emitted"] += 1
 
         # Deleted topics
         for tid, topic in before_topics.items():
             if tid not in after_topics:
-                trace = f"トピック「{topic['name']}」の記憶を忘却した"
-                embedding = encoder.encode_for_emit(trace)
-                signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN, trace=trace)
+                emit_text = f"トピック「{topic['name']}」の記憶を忘却した"
+                embedding = encoder.encode_for_emit(emit_text)
+                signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN)
                 await field.emit(signal)
+                if db_path:
+                    await insert_emit_log(db_path, signal.signal_id, emit_text)
                 summary["deleted_topics_emitted"] += 1
 
         # New open questions
         before_qs = {q["question"] for q in before.get("open_questions", [])}
         for q in after.get("open_questions", []):
             if q["question"] not in before_qs:
-                trace = f"新たな疑問: {q['question']}"
-                embedding = encoder.encode_for_emit(trace)
-                signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN, trace=trace)
+                emit_text = f"新たな疑問: {q['question']}"
+                embedding = encoder.encode_for_emit(emit_text)
+                signal = Signal.create(embedding=embedding, origin=SLEEPYJEAN_ORIGIN)
                 await field.emit(signal)
+                if db_path:
+                    await insert_emit_log(db_path, signal.signal_id, emit_text)
 
         logger.info(
             "wake_export: topics new=%d conf_change=%d deleted=%d",
@@ -120,18 +136,18 @@ async def wake_export(
         logger.error("wake_export: Knowledge diff failed: %s", e)
 
     # 2. Emit Q&A pairs as rotation tasks (from night result log)
-    if night_result_dir:
+    if night_result_dir and llamarcute_db_path:
         try:
-            qa_count = await _emit_qa_pairs(field, encoder, night_result_dir)
+            qa_count = await _transfer_qa_pairs(night_result_dir, llamarcute_db_path)
             summary["qa_pairs_emitted"] = qa_count
-            logger.info("wake_export: Emitted %d Q&A rotation tasks", qa_count)
+            logger.info("wake_export: Transferred %d Q&A rotation tasks via SQLite", qa_count)
         except Exception as e:
-            logger.error("wake_export: Q&A emission failed: %s", e)
+            logger.error("wake_export: Q&A transfer failed: %s", e)
 
     # 3. Emit dream insights as signals (T3: dream tracking)
     if night_result_dir:
         try:
-            dream_count = await _emit_dream_signals(field, encoder, night_result_dir)
+            dream_count = await _emit_dream_signals(field, encoder, night_result_dir, db_path=db_path)
             summary["dream_signals_emitted"] = dream_count
             logger.info("wake_export: Emitted %d dream signals", dream_count)
         except Exception as e:
@@ -193,11 +209,71 @@ def select_rotation_qa(
     return selected
 
 
+async def _transfer_qa_pairs(
+    night_result_dir: str | Path,
+    llamarcute_db_path: str | Path,
+    max_qa: int = 8,
+) -> int:
+    """Transfer Q&A pairs directly from SleepyJean's training data to llamarcute SQLite.
+
+    Bypasses the shared field — Q&A pairs are structured data, not signals.
+    """
+    from datetime import date
+    import glob
+
+    today = date.today().isoformat()
+    pattern = str(Path(night_result_dir) / today / "sft_*.jsonl")
+    files = glob.glob(pattern)
+
+    # 1. Collect all valid Q&A pairs
+    all_pairs: list[dict] = []
+    for fpath in files:
+        source_file = Path(fpath).stem
+        with open(fpath) as f:
+            for line in f:
+                try:
+                    record = json.loads(line.strip())
+                except json.JSONDecodeError:
+                    continue
+                instruction = record.get("instruction", "")
+                output = record.get("output", "")
+                if not instruction or not output:
+                    continue
+                all_pairs.append({
+                    "instruction": instruction,
+                    "output": output,
+                    "source_file": source_file,
+                })
+
+    logger.info(
+        "_transfer_qa_pairs: Found %d Q&A pairs across %d files, selecting up to %d",
+        len(all_pairs), len(files), max_qa,
+    )
+
+    # 2. Select diverse subset
+    selected = select_rotation_qa(all_pairs, max_count=max_qa)
+
+    # 3. Insert directly into llamarcute's rotation_tasks table
+    import aiosqlite
+    async with aiosqlite.connect(llamarcute_db_path) as db:
+        # Clear old rotation tasks before inserting new ones
+        await db.execute("DELETE FROM rotation_tasks")
+        for qa in selected:
+            await db.execute(
+                "INSERT INTO rotation_tasks (instruction, output) VALUES (?, ?)",
+                (qa["instruction"], qa["output"]),
+            )
+        await db.commit()
+
+    return len(selected)
+
+
 async def _emit_qa_pairs(
     field: ChromaDBField,
     encoder: E5SmallEncoder,
     night_result_dir: str | Path,
     max_qa: int = 8,
+    db_path: str | Path | None = None,
 ) -> int:
     """Emit quality-checked Q&A pairs from SleepyJean's training data.
 
@@ -241,16 +317,17 @@ async def _emit_qa_pairs(
     # 2. Select diverse subset
     selected = select_rotation_qa(all_pairs, max_count=max_qa)
 
-    # 3. Emit selected pairs (instruction in trace, output in extra)
+    # 3. Emit selected pairs (instruction and output in extra)
     count = 0
     for qa in selected:
-        trace = f"Q&A: {qa['instruction'][:80]}"
         embedding = encoder.encode_for_emit(qa["instruction"])
         signal = Signal.create(
-            embedding=embedding, origin=QA_ORIGIN, trace=trace,
+            embedding=embedding, origin=QA_ORIGIN,
             extra={"instruction": qa["instruction"], "output": qa.get("output", "")},
         )
         await field.emit(signal)
+        if db_path:
+            await insert_emit_log(db_path, signal.signal_id, f"Q&A: {qa['instruction'][:80]}")
         count += 1
 
     return count
@@ -260,6 +337,7 @@ async def _emit_dream_signals(
     field: ChromaDBField,
     encoder: E5SmallEncoder,
     night_result_dir: str | Path,
+    db_path: str | Path | None = None,
 ) -> int:
     """Emit dream diary insights as signals to the shared field.
 
@@ -296,18 +374,22 @@ async def _emit_dream_signals(
         insight = conn.get("insight", "")
         if not insight:
             continue
-        trace = f"夢の接続: {' × '.join(topics[:3])} — {insight[:80]}"
-        embedding = encoder.encode_for_emit(trace)
-        signal = Signal.create(embedding=embedding, origin=DREAM_ORIGIN, trace=trace)
+        emit_text = f"夢の接続: {' × '.join(topics[:3])} — {insight[:80]}"
+        embedding = encoder.encode_for_emit(emit_text)
+        signal = Signal.create(embedding=embedding, origin=DREAM_ORIGIN)
         await field.emit(signal)
+        if db_path:
+            await insert_emit_log(db_path, signal.signal_id, emit_text)
         count += 1
 
     # Emit dream insights
     for insight in dream.get("insights", []):
-        trace = f"夢の洞察: {insight[:100]}"
-        embedding = encoder.encode_for_emit(trace)
-        signal = Signal.create(embedding=embedding, origin=DREAM_ORIGIN, trace=trace)
+        emit_text = f"夢の洞察: {insight[:100]}"
+        embedding = encoder.encode_for_emit(emit_text)
+        signal = Signal.create(embedding=embedding, origin=DREAM_ORIGIN)
         await field.emit(signal)
+        if db_path:
+            await insert_emit_log(db_path, signal.signal_id, emit_text)
         count += 1
 
     return count

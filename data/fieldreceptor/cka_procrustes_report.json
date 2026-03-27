@@ -1,0 +1,32 @@
+{
+  "samples": 268,
+  "candidates": {
+    "A_embed_mean": {
+      "cka": 0.5445237159729004,
+      "procrustes_disparity": 0.4129082573777356,
+      "field_dim": 384,
+      "llm_dim": 4096
+    },
+    "B_embed_last": {
+      "cka": 0.25460612773895264,
+      "procrustes_disparity": 0.6661158132157772,
+      "field_dim": 384,
+      "llm_dim": 4096
+    },
+    "C_layer1_mean": {
+      "cka": 0.5562028884887695,
+      "procrustes_disparity": 0.43527384822422066,
+      "field_dim": 384,
+      "llm_dim": 4096
+    }
+  },
+  "decision": {
+    "best_candidate": "A_embed_mean",
+    "architecture": "mlp_1hidden",
+    "reason": "CKA=0.545, Procrustes=0.413 → 1-hidden MLP. A selected over C (CKA +0.01) because injection point is embedding layer output — using C would cause double application of transformer layer 1.",
+    "cka": 0.5445237159729004,
+    "procrustes_disparity": 0.4129082573777356,
+    "field_dim": 384,
+    "llm_dim": 4096
+  }
+}

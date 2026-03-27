@@ -15,9 +15,10 @@ from datetime import timedelta
 
 from shared_state.backends.chromadb_backend import ChromaDBField
 from shared_state.encoder import E5SmallEncoder
-from shared_state.interface import SenseParams, SignalOrigin
+from shared_state.field_receptor import FieldReceptorImpl
+from shared_state.interface import PerceiveParams, SenseParams, SignalOrigin
 
-from llamarcute_live import ollama_client
+from llamarcute_live.llm_inference import FieldAwareLLM
 from llamarcute_live.personality import Personality
 
 logger = logging.getLogger(__name__)
@@ -164,8 +165,7 @@ async def determine_max_changes(
 
     for s in snap.signals:
         if (
-            s.origin.context == "immune"
-            and "conservative_mode" in s.trace
+            s.origin.context == "immune:conservative_mode"
             and (now - s.emitted_at) < timedelta(hours=48)
         ):
             logger.info(
@@ -209,13 +209,14 @@ async def generate_mutation_candidates(
     max_changes: int,
     field: ChromaDBField,
     encoder: E5SmallEncoder,
-    ollama_model: str = "qwen3:8b",
+    llm: FieldAwareLLM | None = None,
+    receptor: FieldReceptorImpl | None = None,
     num_candidates: int = 3,
 ) -> list[Personality]:
-    """Generate mutation candidates by querying the field for improvement material.
+    """Generate mutation candidates using field perception as context.
 
     Steps:
-    1. Sense field for difficulty signals and recent memories
+    1. Perceive field → FieldReceptor → embedding injection
     2. For each of 3 diversity instructions, generate a mutation via LLM
     3. Parse and validate each mutation
     4. Return list of valid mutated Personalities
@@ -223,14 +224,15 @@ async def generate_mutation_candidates(
     Returns at most num_candidates Personalities. May return fewer if
     some mutations fail to parse or validate.
     """
-    # 1. Gather material from the shared field
-    diff_query = encoder.encode_for_sense("最近の対話で困難だったこと、改善すべき点")
-    diff_reading = await field.sense(diff_query, SenseParams(max_signals=10))
-    difficulties = [ws.signal.trace for ws in diff_reading.signals]
-
-    mem_query = encoder.encode_for_sense("最新の学習内容と知識の変化")
-    mem_reading = await field.sense(mem_query, SenseParams(max_signals=10))
-    memories = [ws.signal.trace for ws in mem_reading.signals]
+    # 1. Perceive field and transform via FieldReceptor
+    field_embeddings = None
+    if receptor is not None:
+        perception = await field.perceive(PerceiveParams())
+        if perception.signals:
+            field_embeddings = receptor.transduce(
+                [ps.signal.embedding for ps in perception.signals],
+                [ps.strength for ps in perception.signals],
+            )
 
     current_ver = current_personality.version
     next_ver = current_ver + 1
@@ -243,20 +245,29 @@ async def generate_mutation_candidates(
 
         user_prompt = MUTATION_USER_TEMPLATE.format(
             numbered_rules=current_personality.to_numbered_rules(),
-            difficulties="\n".join(f"- {d}" for d in difficulties) if difficulties else "(none)",
-            memories="\n".join(f"- {m}" for m in memories) if memories else "(none)",
+            difficulties="(perceived via field embedding injection)",
+            memories="(perceived via field embedding injection)",
             max_changes=max_changes,
             rule_count=current_personality.rule_count,
             diversity_instruction=instruction,
         )
 
         try:
-            response, duration = await ollama_client.chat(
-                system_prompt=MUTATION_SYSTEM_PROMPT,
-                user_message=user_prompt,
-                model=ollama_model,
-                timeout_sec=120,
-            )
+            if llm is not None:
+                response, duration = await llm.generate_with_field(
+                    system_prompt=MUTATION_SYSTEM_PROMPT,
+                    user_input=user_prompt,
+                    field_embeddings=field_embeddings,
+                    max_new_tokens=1024,
+                    temperature=0.7,
+                )
+            else:
+                from llamarcute_live import ollama_client
+                response, duration = await ollama_client.chat(
+                    system_prompt=MUTATION_SYSTEM_PROMPT,
+                    user_message=user_prompt,
+                    timeout_sec=120,
+                )
 
             if response is None:
                 logger.warning("Mutation %s: LLM returned None", candidate_id)

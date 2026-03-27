@@ -140,7 +140,7 @@ async def setup_field(encoder: E5SmallEncoder, collection_name: str) -> ChromaDB
         emb = encoder.encode_for_emit(sig_def["trace"])
         emb = emb * sig_def["norm"]
         signal = Signal.create(
-            embedding=emb, origin=sig_def["origin"], trace=sig_def["trace"],
+            embedding=emb, origin=sig_def["origin"],
         )
         await field.emit(signal)
     return field
@@ -197,7 +197,8 @@ async def run_condition(
     # Sense with Q5
     query_emb = encoder.encode_for_sense(SELF_QUERY)
     reading = await field.sense(query_emb, SenseParams(max_signals=10, min_relevance=0.0))
-    self_traces = [ws.signal.trace for ws in reading.signals]
+    # T1: trace廃止 — 実験スクリプトなので空リストに
+    self_traces: list[str] = []
 
     # Build prompt
     if condition == "A":
