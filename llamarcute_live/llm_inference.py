@@ -150,26 +150,38 @@ class FieldAwareLLM:
         try:
             self.load()
 
+            import re
+
             device = self._model_device
             embed_layer = self._embed_layer
             max_tok = max_new_tokens or self._max_new_tokens
             temp = temperature or self._temperature
 
-            # Append /no_think to suppress Qwen3 internal reasoning output
-            full_sys = system_prompt + "\n/no_think"
+            # Build chat-formatted token sequence via apply_chat_template.
+            # /no_think is included in system content so it lands inside
+            # <|im_start|>system\n{content}\n/no_think<|im_end|>
+            #
+            # Field embeddings are injected between system and user turns.
+            # We split the template output at the boundary, embed each part,
+            # then concatenate with field embeddings in between.
 
-            # Tokenize system prompt and user input separately
-            sys_ids = self._tokenizer(
-                full_sys,
-                return_tensors="pt",
-                add_special_tokens=True,
-            ).input_ids.to(device)
+            sys_content = system_prompt + "\n/no_think"
+            messages_sys = [{"role": "system", "content": sys_content}]
+            messages_user = [{"role": "user", "content": user_input}]
 
-            user_ids = self._tokenizer(
-                user_input,
+            # System turn tokens (with template formatting)
+            sys_ids = self._tokenizer.apply_chat_template(
+                messages_sys,
+                add_generation_prompt=False,
                 return_tensors="pt",
-                add_special_tokens=False,
-            ).input_ids.to(device)
+            )["input_ids"].to(device)
+
+            # User turn + generation prompt tokens
+            user_ids = self._tokenizer.apply_chat_template(
+                messages_user,
+                add_generation_prompt=True,
+                return_tensors="pt",
+            )["input_ids"].to(device)
 
             # Get text embeddings
             with torch.no_grad():
@@ -183,6 +195,19 @@ class FieldAwareLLM:
                 )
                 if field_tensor.dim() == 2:
                     field_tensor = field_tensor.unsqueeze(0)  # (1, K, H)
+
+                # Scale field embeddings to match text token norm range.
+                # FieldReceptor output norms (~22) are ~14x larger than text
+                # token norms (~1.6), which distorts attention scores.
+                # Uniform scaling preserves relative norm ratios (signal
+                # concentration) per shared_field_design.md 3.1.
+                # TODO: sys_embeds + user_embeds の結合ノルムで計算する
+                # 現在はsys_embeds固定長(497tok)に依存。行動規範変動時に再検討
+                text_norm = sys_embeds.norm(dim=-1).mean()
+                field_mean_norm = field_tensor.norm(dim=-1).mean().clamp(min=1e-8)
+                scale = text_norm / field_mean_norm
+                field_tensor = field_tensor * scale
+
                 combined = torch.cat([sys_embeds, field_tensor, user_embeds], dim=1)
             else:
                 combined = torch.cat([sys_embeds, user_embeds], dim=1)
@@ -218,13 +243,17 @@ class FieldAwareLLM:
             with torch.no_grad():
                 output_ids = self._model.generate(**generate_kwargs)
 
+            # Decode with skip_special_tokens=False to preserve <think> tags,
+            # then strip thinking blocks, then remove remaining special tokens.
             raw = self._tokenizer.decode(
-                output_ids[0], skip_special_tokens=True,
-            ).strip()
-
-            # Strip Qwen3 thinking tags (internal reasoning leakage)
-            import re
-            response = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+                output_ids[0], skip_special_tokens=False,
+            )
+            # Strip closed and unclosed thinking blocks
+            response = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
+            response = re.sub(r"<think>.*", "", response, flags=re.DOTALL)
+            # Strip Qwen3 special tokens (<|im_start|>, <|im_end|>, <|endoftext|>, etc.)
+            response = re.sub(r"<\|[^|]*\|>", "", response)
+            response = response.strip()
 
             duration = time.monotonic() - start
             n_field = field_embeddings.shape[0] if field_embeddings is not None else 0

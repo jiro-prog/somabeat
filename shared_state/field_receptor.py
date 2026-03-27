@@ -81,4 +81,4 @@ class FieldReceptorImpl(nn.Module):
         model = cls(field_dim=field_dim, agent_dim=agent_dim, hidden_dim=hidden_dim)
         model.load_state_dict(state)
         model.eval()
-        return model
+        return model.to(device)
