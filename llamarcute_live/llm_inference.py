@@ -38,13 +38,17 @@ class FieldAwareLLM:
         device: str = "cuda",
         max_new_tokens: int = 256,
         temperature: float = 0.7,
+        kv_cache_bits: int = 3,
     ) -> None:
         self._model_name = model_name
         self._device = device
         self._max_new_tokens = max_new_tokens
         self._temperature = temperature
+        self._kv_cache_bits = kv_cache_bits
         self._model = None
         self._tokenizer = None
+        self._compressor = None
+        self._model_patched = False
 
     def is_loaded(self) -> bool:
         return self._model is not None
@@ -80,6 +84,24 @@ class FieldAwareLLM:
         self._model.eval()
         logger.info("Model loaded. Device: %s", next(self._model.parameters()).device)
 
+        # Initialize TurboQuant compressor for KV cache compression
+        if self._kv_cache_bits > 0:
+            from shared_state.turboquant import TurboQuantCompressor
+            head_dim = self._model.config.head_dim
+            self._compressor = TurboQuantCompressor(
+                head_dim=head_dim, bits=self._kv_cache_bits,
+            )
+            logger.info(
+                "TurboQuant KV cache: %d-bit, head_dim=%d",
+                self._kv_cache_bits, head_dim,
+            )
+
+        logger.info(
+            "VRAM after load: allocated=%.0fMiB, reserved=%.0fMiB",
+            torch.cuda.memory_allocated() / 1024**2,
+            torch.cuda.memory_reserved() / 1024**2,
+        )
+
     def unload(self) -> None:
         """Free GPU memory."""
         if self._model is not None:
@@ -87,6 +109,10 @@ class FieldAwareLLM:
             del self._tokenizer
             self._model = None
             self._tokenizer = None
+            self._model_patched = False
+            if self._compressor is not None:
+                del self._compressor
+                self._compressor = None
             torch.cuda.empty_cache()
             logger.info("Model unloaded, GPU memory freed.")
 
@@ -166,18 +192,31 @@ class FieldAwareLLM:
                 1, combined.shape[1], dtype=torch.long, device=device,
             )
 
-            # Generate
-            with torch.no_grad():
-                output_ids = self._model.generate(
-                    inputs_embeds=combined,
-                    attention_mask=attention_mask,
-                    max_new_tokens=max_tok,
-                    do_sample=temp > 0,
-                    temperature=temp if temp > 0 else 1.0,
-                    top_p=0.9,
-                    repetition_penalty=1.3,
-                    pad_token_id=self._tokenizer.pad_token_id,
+            # Generate with TurboQuant KV cache compression
+            generate_kwargs = dict(
+                inputs_embeds=combined,
+                attention_mask=attention_mask,
+                max_new_tokens=max_tok,
+                do_sample=temp > 0,
+                temperature=temp if temp > 0 else 1.0,
+                top_p=0.9,
+                repetition_penalty=1.3,
+                pad_token_id=self._tokenizer.pad_token_id,
+            )
+            if self._compressor is not None:
+                from llamarcute_live.kv_cache import (
+                    TurboQuantCache,
+                    patch_model_for_turboquant,
                 )
+                if not self._model_patched:
+                    patch_model_for_turboquant(self._model, self._compressor)
+                    self._model_patched = True
+                generate_kwargs["past_key_values"] = TurboQuantCache(
+                    self._compressor,
+                )
+
+            with torch.no_grad():
+                output_ids = self._model.generate(**generate_kwargs)
 
             raw = self._tokenizer.decode(
                 output_ids[0], skip_special_tokens=True,
@@ -189,9 +228,15 @@ class FieldAwareLLM:
 
             duration = time.monotonic() - start
             n_field = field_embeddings.shape[0] if field_embeddings is not None else 0
+            n_input = combined.shape[1]
+            n_output = output_ids.shape[1]
+            tps = n_output / duration if duration > 0 else 0
             logger.info(
-                "FieldAwareLLM: %d chars, %.1fs (field_signals=%d, sys_tokens=%d, user_tokens=%d)",
-                len(response), duration, n_field, sys_ids.shape[1], user_ids.shape[1],
+                "FieldAwareLLM: %d chars, %.1fs, %.1f tok/s "
+                "(input=%d [sys=%d + field=%d + user=%d], output=%d)",
+                len(response), duration, tps,
+                n_input, sys_ids.shape[1], n_field, user_ids.shape[1],
+                n_output,
             )
             return response, duration
 

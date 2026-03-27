@@ -88,10 +88,36 @@ class IntegratedBot(commands.Bot):
             state = self.orchestrator.state.value
             p = self.orchestrator.personality
             snap = await self.orchestrator.field.snapshot()
+
+            # VRAM diagnostic
+            import torch
+            vram_lines = []
+            if torch.cuda.is_available():
+                alloc = torch.cuda.memory_allocated() / 1024**2
+                reserved = torch.cuda.memory_reserved() / 1024**2
+                vram_lines.append(f"**VRAM:** alloc={alloc:.0f}MiB, reserved={reserved:.0f}MiB")
+
+            # Check device of key models
+            devices = []
+            llm = self.orchestrator.dialogue.llm
+            if llm and llm.is_loaded():
+                dev = next(llm._model.parameters()).device
+                devices.append(f"LLM: {dev}")
+            receptor = self.orchestrator.dialogue.receptor
+            if receptor:
+                dev = next(receptor.parameters()).device
+                devices.append(f"FieldReceptor: {dev}")
+            enc = getattr(self.orchestrator, '_multimodal_encoder', None)
+            if enc is None:
+                enc = getattr(self.orchestrator.dialogue.encoder, '_projection_text', None)
+            if devices:
+                vram_lines.append(f"**Devices:** {', '.join(devices)}")
+
             await interaction.response.send_message(
                 f"**状態:** {state}\n"
                 f"**人格:** {p.id} v{p.version} ({p.rule_count} rules)\n"
-                f"**場の信号数:** {snap.total_count}"
+                f"**場の信号数:** {snap.total_count}\n"
+                + "\n".join(vram_lines)
             )
 
         @self.tree.command(name="field", description="場の直近ログを表示")
@@ -348,10 +374,15 @@ Orchestrator.notification_callback = None
 
 
 def main() -> None:
+    log_fmt = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        format=log_fmt,
         datefmt="%H:%M:%S",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler("data/bot.log", encoding="utf-8"),
+        ],
     )
 
     config = load_config()

@@ -223,16 +223,39 @@ class DialogueManager:
 
     async def process_input(self, user_input: str) -> str:
         """Full dialogue turn: perceive → prompt → respond → emit → log."""
+        import time as _time
+        t_start = _time.monotonic()
+
         await self.save_log("user", user_input)
 
+        t0 = _time.monotonic()
         field_embeddings = await self.perceive_field()
+        t_perceive = _time.monotonic() - t0
+
+        n_signals = field_embeddings.shape[0] if field_embeddings is not None else 0
+        logger.info(
+            "[TIMING] perceive_field: %.3fs (%d signals → %s)",
+            t_perceive, n_signals,
+            f"{field_embeddings.shape}" if field_embeddings is not None else "None",
+        )
+
         system_prompt = self.build_prompt()
 
         logger.debug("System prompt:\n%s", system_prompt)
+        t0 = _time.monotonic()
         response = await self.generate_response(user_input, system_prompt, field_embeddings)
+        t_generate = _time.monotonic() - t0
 
+        t0 = _time.monotonic()
         if response != ERROR_RESPONSE:
             await self.emit_experience(user_input, response)
+        t_emit = _time.monotonic() - t0
+
+        t_total = _time.monotonic() - t_start
+        logger.info(
+            "[TIMING] total=%.1fs (perceive=%.3fs, generate=%.1fs, emit=%.3fs)",
+            t_total, t_perceive, t_generate, t_emit,
+        )
         await self.save_log("assistant", response)
 
         # 会話バッファに追記（ワーキングメモリ）— エラー応答は含めない
