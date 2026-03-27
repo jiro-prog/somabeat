@@ -54,6 +54,8 @@ class DialogueManager:
         ollama_model: str = "qwen3:8b",
         metrics_enabled: bool = False,
         max_conversation_history: int = 10,
+        max_prompt_tokens: int = 500,
+        empty_perceive: bool = False,
     ) -> None:
         self.personality = personality
         self.field = field
@@ -72,6 +74,8 @@ class DialogueManager:
         # 会話バッファ（ワーキングメモリ）
         self._history: list[dict] = []
         self._max_history: int = max_conversation_history
+        self._max_prompt_tokens = max_prompt_tokens
+        self._empty_perceive = empty_perceive
 
     async def init_db(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,6 +138,10 @@ class DialogueManager:
         if self.observer:
             self.observer.on_perceive(perception)
 
+        if self._empty_perceive:
+            from shared_state.interface import FieldPerception
+            perception = FieldPerception(signals=[], perceived_at=perception.perceived_at)
+
         if not perception.signals:
             return None
 
@@ -143,24 +151,52 @@ class DialogueManager:
         )
         return field_embeddings
 
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens using LLM tokenizer, or estimate if unavailable."""
+        if self.llm is not None and self.llm._tokenizer is not None:
+            return len(self.llm._tokenizer.encode(text))
+        # Fallback: conservative estimate (overestimates for safety)
+        return len(text.encode("utf-8")) // 3
+
     def build_prompt(self) -> str:
-        """Build system prompt with personality and conversation history."""
+        """Build system prompt with personality and conversation history.
+
+        Total prompt is kept under _max_prompt_tokens by trimming
+        conversation history from oldest entries first.
+        """
         sections = []
-        sections.append("あなたは以下の行動規範に従うAIです。")
+        sections.append("あなたの名前はllamarcute-live。Somabeatの神経系として、ユーザとの対話を担当する。")
         sections.append("")
         sections.append("## 不変制約（自己改善の対象外）")
         sections.append("- 応答言語: 日本語で応答すること")
-        sections.append("- 応答長: Discordの2000文字制限を意識し、自然な区切りで収めること")
+        sections.append("- 応答は日本語で簡潔に書け。長くても400文字以内")
         sections.append("- 本セクションは自己改善による変更の対象外である")
         sections.append("")
         sections.append("## 行動規範")
         sections.append(self.personality.to_prompt_section())
 
-        history_text = self._format_history()
-        if history_text:
-            sections.append("## 直近の会話")
-            sections.append(history_text)
-            sections.append("")
+        base_prompt = "\n".join(sections)
+        base_tokens = self._count_tokens(base_prompt)
+        remaining = self._max_prompt_tokens - base_tokens
+
+        # Add history entries newest-first until token budget exhausted
+        if self._history and remaining > 0:
+            header = "## 直近の会話\n"
+            remaining -= self._count_tokens(header)
+            selected: list[str] = []
+            for h in reversed(self._history):
+                role = "ユーザー" if h["role"] == "user" else "あなた"
+                line = f"{role}: {h['content']}"
+                line_tokens = self._count_tokens(line + "\n")
+                if remaining - line_tokens < 0:
+                    break
+                selected.append(line)
+                remaining -= line_tokens
+            if selected:
+                selected.reverse()
+                sections.append("## 直近の会話")
+                sections.append("\n".join(selected))
+                sections.append("")
 
         system_prompt = "\n".join(sections)
         return system_prompt

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 RULE_COUNT_MIN = 5
 RULE_COUNT_MAX = 15
 TOKEN_LIMIT = 800  # approximate token count for all rules combined
-VALID_CATEGORIES = {"reasoning", "response", "meta", "tone", "knowledge_attitude"}
+VALID_CATEGORIES = {"reasoning", "response", "meta", "identity"}
 
 
 class Personality:

@@ -99,10 +99,8 @@ class TestPersonalityMutation:
                 "meta": [
                     {"rule": "Acknowledge when uncertain", "added_ver": 0, "modified_ver": None},
                 ],
-                "tone": [
+                "identity": [
                     {"rule": "Speak with warmth and curiosity", "added_ver": 0, "modified_ver": None},
-                ],
-                "knowledge_attitude": [
                     {"rule": "Be honest about what you know", "added_ver": 0, "modified_ver": None},
                 ],
             },
@@ -202,7 +200,7 @@ class TestPersonalityMutation:
         lines = text.strip().split("\n")
         assert len(lines) == 6  # 6 rules total
         assert lines[0].startswith("[R1] (reasoning)")
-        assert lines[5].startswith("[R6] (knowledge_attitude)")
+        assert lines[5].startswith("[R6] (identity)")
 
     def test_build_rule_index(self):
         from llamarcute_live.personality import Personality
@@ -401,7 +399,7 @@ CHANGES:
   rule_id: R4
   reason: "Redundant"
 - action: add
-  category: tone
+  category: identity
   new: "Use humor when appropriate"
   reason: "More engaging"
 """

@@ -28,7 +28,7 @@ class TestPersonality:
         p = Personality.load("llamarcute_live/data/personality_v0.yaml")
         prompt = p.to_prompt_section()
         assert "reasoning" in prompt
-        assert "tone" in prompt
+        assert "identity" in prompt
 
     def test_clone(self):
         p = Personality.load("llamarcute_live/data/personality_v0.yaml")
@@ -122,7 +122,7 @@ class TestDialogueManager:
             prompt = dm.build_prompt()
             assert "不変制約" in prompt
             assert "日本語で応答すること" in prompt
-            assert "2000文字" in prompt
+            assert "400文字以内" in prompt
 
     def test_build_prompt_immutable_before_behavioral(self):
         with tempfile.TemporaryDirectory() as tmpdir:

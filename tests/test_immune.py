@@ -82,10 +82,8 @@ def _make_personality_data():
             "meta": [
                 {"rule": "Acknowledge when uncertain", "added_ver": 0, "modified_ver": None},
             ],
-            "tone": [
+            "identity": [
                 {"rule": "Speak with warmth and curiosity", "added_ver": 0, "modified_ver": None},
-            ],
-            "knowledge_attitude": [
                 {"rule": "Be honest about what you know", "added_ver": 0, "modified_ver": None},
             ],
         },

@@ -56,6 +56,7 @@ def dialogue_manager(tmp_path):
         db_path=str(tmp_path / "test.db"),
         use_llm=False,
         max_conversation_history=6,  # 3往復分
+        max_prompt_tokens=1000,  # テスト用: LLMトークナイザ不在のためfallback推定が過大
     )
     return dm
 

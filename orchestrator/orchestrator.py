@@ -129,8 +129,13 @@ class Orchestrator:
         # FieldAwareLLM (lazy load — will be loaded on first use)
         self.llm: FieldAwareLLM | None = None
         if ll_cfg.get("use_llm", False):
+            debug_cfg = config.get("debug", {})
+            disable_tq = debug_cfg.get("disable_turboquant", False)
+            kv_bits = 0 if disable_tq else 4
             self.llm = FieldAwareLLM(
                 model_name=ll_cfg.get("transformers_model", "Qwen/Qwen3-8B"),
+                kv_cache_bits=kv_bits,
+                max_new_tokens=128 if disable_tq else 512,
             )
 
         # Dialogue manager
@@ -148,6 +153,7 @@ class Orchestrator:
             ollama_model=ll_cfg.get("ollama_model", "qwen3:8b"),
             metrics_enabled=metrics_cfg.get("enabled", False),
             max_conversation_history=ll_cfg.get("max_conversation_history", 10),
+            empty_perceive=config.get("debug", {}).get("empty_perceive", False),
         )
 
         # SleepyJean paths

@@ -37,6 +37,12 @@ and propose improvements to the strategy rules.
 
 Rules are identified by number (R1, R2, ...). Use these IDs to reference rules.
 
+Category descriptions:
+- identity: defines who you are — speech style, knowledge attitude, self-perception
+- reasoning: how you think through problems
+- response: how you structure and present answers
+- meta: adaptive strategies and situational awareness
+
 You must respond in this exact format:
 
 ANALYSIS:
@@ -51,7 +57,7 @@ CHANGES:
   rule_id: R7
   reason: "(why)"
 - action: add
-  category: reasoning|response|meta|tone|knowledge_attitude
+  category: reasoning|response|meta|identity
   new: "(new rule text)"
   reason: "(why)"
 """

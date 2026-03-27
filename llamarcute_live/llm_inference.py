@@ -36,9 +36,9 @@ class FieldAwareLLM:
         self,
         model_name: str = "Qwen/Qwen3-8B",
         device: str = "cuda",
-        max_new_tokens: int = 256,
+        max_new_tokens: int = 512,
         temperature: float = 0.7,
-        kv_cache_bits: int = 3,
+        kv_cache_bits: int = 4,
     ) -> None:
         self._model_name = model_name
         self._device = device
@@ -204,9 +204,21 @@ class FieldAwareLLM:
                 # TODO: sys_embeds + user_embeds の結合ノルムで計算する
                 # 現在はsys_embeds固定長(497tok)に依存。行動規範変動時に再検討
                 text_norm = sys_embeds.norm(dim=-1).mean()
+                user_norm = user_embeds.norm(dim=-1).mean()
                 field_mean_norm = field_tensor.norm(dim=-1).mean().clamp(min=1e-8)
+                field_norms_pre = field_tensor.squeeze(0).norm(dim=-1)
                 scale = text_norm / field_mean_norm
                 field_tensor = field_tensor * scale
+                field_norms_post = field_tensor.squeeze(0).norm(dim=-1)
+                logger.info(
+                    "Field embedding norms: pre=[min=%.2f, mean=%.2f, max=%.2f] "
+                    "post=[min=%.2f, mean=%.2f, max=%.2f] "
+                    "scale=%.4f, sys_norm=%.2f, user_norm=%.2f, ratio_post=%.2f",
+                    field_norms_pre.min(), field_norms_pre.mean(), field_norms_pre.max(),
+                    field_norms_post.min(), field_norms_post.mean(), field_norms_post.max(),
+                    scale, text_norm, user_norm,
+                    field_norms_post.mean() / text_norm,
+                )
 
                 combined = torch.cat([sys_embeds, field_tensor, user_embeds], dim=1)
             else:
