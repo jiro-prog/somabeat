@@ -145,9 +145,15 @@ class DialogueManager:
         if not perception.signals:
             return None
 
+        strengths = [ps.strength for ps in perception.signals]
+        logger.info(
+            "Perceive strength distribution: n=%d, min=%.2f, mean=%.2f, max=%.2f",
+            len(strengths), min(strengths), sum(strengths) / len(strengths), max(strengths),
+        )
+
         field_embeddings = self.receptor.transduce(
             [ps.signal.embedding for ps in perception.signals],
-            [ps.strength for ps in perception.signals],
+            strengths,
         )
         return field_embeddings
 

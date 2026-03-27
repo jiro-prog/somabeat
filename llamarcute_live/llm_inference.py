@@ -49,6 +49,7 @@ class FieldAwareLLM:
         self._tokenizer = None
         self._compressor = None
         self._model_patched = False
+        self._base_text_norm: float | None = None  # calibrated on first inference
 
     def is_loaded(self) -> bool:
         return self._model is not None
@@ -201,23 +202,32 @@ class FieldAwareLLM:
                 # token norms (~1.6), which distorts attention scores.
                 # Uniform scaling preserves relative norm ratios (signal
                 # concentration) per shared_field_design.md 3.1.
-                # TODO: sys_embeds + user_embeds の結合ノルムで計算する
-                # 現在はsys_embeds固定長(497tok)に依存。行動規範変動時に再検討
-                text_norm = sys_embeds.norm(dim=-1).mean()
-                user_norm = user_embeds.norm(dim=-1).mean()
+                #
+                # base_text_norm is calibrated once on first inference and
+                # fixed thereafter. This ensures the scaling factor is
+                # independent of sequence length (conversation history).
+                # See llamarcute_live_design.md 3.4.
+                if self._base_text_norm is None:
+                    self._base_text_norm = sys_embeds.norm(dim=-1).mean().item()
+                    logger.info(
+                        "Calibrated base_text_norm=%.4f (from %d sys tokens)",
+                        self._base_text_norm, sys_embeds.shape[1],
+                    )
+
+                text_norm_current = sys_embeds.norm(dim=-1).mean()
                 field_mean_norm = field_tensor.norm(dim=-1).mean().clamp(min=1e-8)
                 field_norms_pre = field_tensor.squeeze(0).norm(dim=-1)
-                scale = text_norm / field_mean_norm
+                scale = self._base_text_norm / field_mean_norm
                 field_tensor = field_tensor * scale
                 field_norms_post = field_tensor.squeeze(0).norm(dim=-1)
                 logger.info(
                     "Field embedding norms: pre=[min=%.2f, mean=%.2f, max=%.2f] "
                     "post=[min=%.2f, mean=%.2f, max=%.2f] "
-                    "scale=%.4f, sys_norm=%.2f, user_norm=%.2f, ratio_post=%.2f",
+                    "scale=%.4f, base_norm=%.2f, current_sys_norm=%.2f, ratio_post=%.2f",
                     field_norms_pre.min(), field_norms_pre.mean(), field_norms_pre.max(),
                     field_norms_post.min(), field_norms_post.mean(), field_norms_post.max(),
-                    scale, text_norm, user_norm,
-                    field_norms_post.mean() / text_norm,
+                    scale, self._base_text_norm, text_norm_current,
+                    field_norms_post.mean() / self._base_text_norm,
                 )
 
                 combined = torch.cat([sys_embeds, field_tensor, user_embeds], dim=1)
