@@ -52,6 +52,9 @@ class TurboQuantLayer(CacheLayerMixin):
         self._values: torch.Tensor | None = None        # all values (FP16)
         self._seq_length = 0
         self._prefill_done = False
+        # Field KV pruning (set via TurboQuantCache.enable_field_pruning)
+        self._prune_field_start: int | None = None
+        self._prune_field_count: int | None = None
 
     def lazy_initialization(
         self, key_states: torch.Tensor, value_states: torch.Tensor,
@@ -110,6 +113,23 @@ class TurboQuantLayer(CacheLayerMixin):
             if not self._prefill_done:
                 self._prefill_done = True
                 self._fp16_keys = None
+                # Prune field KV entries (if configured)
+                if self._prune_field_start is not None:
+                    fs = self._prune_field_start
+                    fc = self._prune_field_count
+                    self._key_indices = torch.cat([
+                        self._key_indices[..., :fs, :],
+                        self._key_indices[..., fs + fc:, :],
+                    ], dim=-2)
+                    self._key_norms = torch.cat([
+                        self._key_norms[..., :fs],
+                        self._key_norms[..., fs + fc:],
+                    ], dim=-1)
+                    self._values = torch.cat([
+                        self._values[..., :fs, :],
+                        self._values[..., fs + fc:, :],
+                    ], dim=-2)
+                    self._seq_length -= fc
             # Return current key_states as dummy (ignored by patched forward)
             return key_states, self._values
 
@@ -170,6 +190,18 @@ class TurboQuantCache(DynamicCache):
         self.layer_class_to_replicate = None
         self.layers = []
 
+    def get_tq_layer(self, layer_idx: int) -> TurboQuantLayer:
+        return self.layers[layer_idx]
+
+    def enable_field_pruning(self, field_start: int, field_count: int) -> None:
+        """Configure field KV pruning for all layers.
+
+        When set, each layer will prune field entries on the first decode
+        step (prefill→decode transition), before any decode attention.
+        """
+        self._field_start = field_start
+        self._field_count = field_count
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -178,14 +210,47 @@ class TurboQuantCache(DynamicCache):
         cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         while len(self.layers) <= layer_idx:
-            self.layers.append(TurboQuantLayer(self._compressor))
+            layer = TurboQuantLayer(self._compressor)
+            # Propagate pruning config to new layers
+            if hasattr(self, '_field_start'):
+                layer._prune_field_start = self._field_start
+                layer._prune_field_count = self._field_count
+            self.layers.append(layer)
 
         return self.layers[layer_idx].update(
             key_states, value_states, cache_kwargs,
         )
 
-    def get_tq_layer(self, layer_idx: int) -> TurboQuantLayer:
-        return self.layers[layer_idx]
+    def prune_field_kv(self, field_start: int, field_count: int) -> None:
+        """Remove field embedding KV entries from all layers after prefill.
+
+        Args:
+            field_start: Start position of field tokens in the sequence.
+            field_count: Number of field tokens to remove.
+        """
+        field_end = field_start + field_count
+        for layer in self.layers:
+            if layer._key_indices is not None:
+                layer._key_indices = torch.cat([
+                    layer._key_indices[..., :field_start, :],
+                    layer._key_indices[..., field_end:, :],
+                ], dim=-2)
+            if layer._key_norms is not None:
+                layer._key_norms = torch.cat([
+                    layer._key_norms[..., :field_start],
+                    layer._key_norms[..., field_end:],
+                ], dim=-1)
+            if layer._values is not None:
+                layer._values = torch.cat([
+                    layer._values[..., :field_start, :],
+                    layer._values[..., field_end:, :],
+                ], dim=-2)
+            if layer._fp16_keys is not None:
+                layer._fp16_keys = torch.cat([
+                    layer._fp16_keys[..., :field_start, :],
+                    layer._fp16_keys[..., field_end:, :],
+                ], dim=-2)
+            layer._seq_length -= field_count
 
 
 def patch_model_for_turboquant(model, compressor: TurboQuantCompressor):

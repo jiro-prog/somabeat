@@ -236,8 +236,17 @@ llamarcute-live は対話のたびに共有状態の場を読み書きする。
   → user_input_embeddings      ← ユーザ入力（テキスト経由）
 
   → [system prompt] [field_1] ... [field_K] [user input]
-  → LLM transformer直接実行
-  → 応答生成
+  → LLM transformer直接実行（prefill）
+
+field KVエントリ除去:
+  → prefill完了後、decode開始前に、KVキャッシュからfield位置のエントリを除去
+  → 設計根拠: 受容体にホルモンが結合してシグナル伝達カスケードを起こした後、
+    ホルモン分子自体を保持し続ける必要はない。濃度情報はprefill時の
+    attentionパターンを通じてテキストトークンのKV表現に焼き込まれる
+  → 計測根拠: decode時のfield位置へのattention weight比率は全質問タイプで
+    layer・head平均 0.83-1.11%（ゲート基準2%未満をPASS）
+
+  → 応答生成（decode）
 
 **制約:** 場のembeddingのスケーリングはテキストシーケンス長に非依存でなければならない。スケーリング係数はモデルロード後の初回推論時に計測したベースプロンプトのembeddingノルム（固定値）と、各推論時の場のembedding平均ノルム（場の状態に依存）から算出する。
 

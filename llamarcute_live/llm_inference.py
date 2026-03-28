@@ -258,9 +258,13 @@ class FieldAwareLLM:
                 if not self._model_patched:
                     patch_model_for_turboquant(self._model, self._compressor)
                     self._model_patched = True
-                generate_kwargs["past_key_values"] = TurboQuantCache(
-                    self._compressor,
-                )
+                cache = TurboQuantCache(self._compressor)
+                if field_embeddings is not None and len(field_embeddings) > 0:
+                    cache.enable_field_pruning(
+                        field_start=sys_ids.shape[1],
+                        field_count=field_embeddings.shape[0],
+                    )
+                generate_kwargs["past_key_values"] = cache
 
             with torch.no_grad():
                 output_ids = self._model.generate(**generate_kwargs)
