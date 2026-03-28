@@ -134,10 +134,12 @@ integrated-system: Somabeatの統合システム。Discord Bot (Sleepy Jean) を
 - `config/system.yaml` — 全体設定
 
 ## LLM推論
-- モデル: Qwen/Qwen3-8B (4-bit NF4, bitsandbytes)
-- KVキャッシュ: TurboQuant 4-bit圧縮
+- モデル: AlphaGaO/Qwen3-8B-GPTQ (GPTQ 4-bit + Marlin kernel, W4A16 fused GEMV)
+- KVキャッシュ: FP16（TurboQuantは無効化、コードは保持）
 - Field embedding注入: system tokens と user tokens の間に挿入
 - /no_think: system content末尾に付与、skip_special_tokens=False で処理
+- 性能: ~26 tok/s, ~8.5s応答, VRAM 5.7GB (RTX 3060 Ti)
+- config切り替え: `llamarcute_live.llm.quantization` で nf4/gptq_marlin 選択可能
 
 ## 推論エンジンの使い分け
 - 場のembeddingを受け取る認知機能 → FieldAwareLLM（inputs_embeds注入）
@@ -147,7 +149,7 @@ integrated-system: Somabeatの統合システム。Discord Bot (Sleepy Jean) を
 ## 重要な設計判断
 - 行動規範は英語で記述（LLMの指示追従性が英語で最も高い）
 - 不変制約はbuild_prompt()にハードコード（自己改善スクリプトからアクセス不能にする）
-- NF4由来の軽微なトークン崩壊（低頻度外来語）は受容
+- GPTQ量子化でもNF4同様の軽微なトークン崩壊（低頻度外来語）は受容見込み
 - FR出力ノルムはL2正規化不可、一律スケーリングで保持
 
 ## テスト
@@ -156,7 +158,7 @@ integrated-system: Somabeatの統合システム。Discord Bot (Sleepy Jean) を
 
 ## debug設定 (config/system.yaml)
 - `debug.empty_perceive`: perceive結果を空にする（field embedding切り分け用）
-- `debug.disable_turboquant`: TurboQuant無効化（FP16 KV、VRAM注意）
+- `debug.disable_turboquant`: TurboQuant無効化（現在デフォルト無効。NF4使用時のみ関連）
 
 ---
 

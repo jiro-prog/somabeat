@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-03-28 Marlinカーネル検証 (軸B)
+
+### 判断: 推論エンジンをbitsandbytes NF4からGPTQ+Marlinに切り替え
+- **状況:** FFN層のmatmul（全体の79%）がbitsandbytes NF4のdequant→FP16 matmulで律速。Marlin (W4A16 fused GEMV) への差し替えを検証
+- **計測結果:**
+
+| 構成 | tok/s | 応答時間 | ピークVRAM |
+|------|-------|----------|-----------|
+| NF4 + TQ + pruning (従来) | 1.2 | 53s | ~6.1 GB |
+| Marlin + TQ + pruning | 14.6 | 14.2s | 5.72 GB |
+| Marlin + FP16 KV | 25.9 | 8.5s | 5.68 GB |
+
+- **決定:** 構成B (Marlin + FP16 KV) を採用。約21倍の速度改善
+- **根拠:** RTX 3060 Tiのメモリバンド幅制約下で、NF4のdequant読み出し回数削減の効果が劇的。TurboQuantはMarlin環境下では純粋なオーバーヘッド (14.6 vs 25.9)
+- **リスク:** GPTQモデル(AlphaGaO/Qwen3-8B-GPTQ)への依存。NF4パスは_load_nf4()として保持
+
+### 判断: TurboQuantを本番パスから無効化（コード・テストは保持）
+- **状況:** Marlin + FP16 KVで5.68GB、8GB以内に余裕。TurboQuantのKVキャッシュ圧縮は不要
+- **決定:** config `kv_cache_bits: 0` で無効化。コード・テスト24件は残す
+- **根拠:** (1) 将来のハードウェア変更時に必要になる可能性 (2) 実装自体の学び（Lloyd-Maxコードブック等）に価値
+- **リスク:** なし。無効化であり削除ではない
+
+### 判断: field KV pruningを無効化
+- **状況:** 構成Bの25.9 tok/sはpruning無しの数字。FP16 KVで10トークンのattentionオーバーヘッドは誤差
+- **決定:** 無効化。pruningロジックはTurboQuantCacheに密結合しており、FP16 KV時には適用されない
+- **根拠:** コードの複雑さ削減。Marlinの速度ではfield 10トークンの影響は無視可能
+
+### 発見: GPTQモデルのnative dtypeはbfloat16（NF4はfloat16）
+- **内容:** Marlin kernelはbfloat16/float16両対応だが、GPTQModel.load()はbfloat16で推論。field embedding注入時のdtypeはsys_embeds.dtypeに自動一致（既存コードで対応済み）
+- **対処:** 修正不要。既存のdtype合わせロジックが正常動作
+
+---
+
 ## 2026-03-28 日本語品質デバッグ
 
 ### 判断: TurboQuant 3-bit → 4-bit に恒久変更

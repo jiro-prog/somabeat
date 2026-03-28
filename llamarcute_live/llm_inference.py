@@ -3,6 +3,10 @@
 Replaces Ollama for cognitive functions that read from the shared field.
 Uses Qwen3-8B with 4-bit quantization and inputs_embeds injection.
 
+Supported quantization backends:
+  - gptq_marlin: GPTQ + Marlin kernel (W4A16 fused GEMV). Default.
+  - nf4: bitsandbytes NF4 (legacy, slower on bandwidth-limited GPUs).
+
 Injection layout:
   [system_prompt_tokens] [field_signal_embeds] [user_input_tokens]
                           ↑ FieldReceptor output injected here
@@ -19,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +42,17 @@ class FieldAwareLLM:
         device: str = "cuda",
         max_new_tokens: int = 512,
         temperature: float = 0.7,
-        kv_cache_bits: int = 4,
+        kv_cache_bits: int = 0,
+        quantization: str = "gptq_marlin",
+        gptq_model: str = "AlphaGaO/Qwen3-8B-GPTQ",
     ) -> None:
         self._model_name = model_name
         self._device = device
         self._max_new_tokens = max_new_tokens
         self._temperature = temperature
         self._kv_cache_bits = kv_cache_bits
+        self._quantization = quantization
+        self._gptq_model = gptq_model
         self._model = None
         self._tokenizer = None
         self._compressor = None
@@ -59,29 +67,13 @@ class FieldAwareLLM:
         if self._model is not None:
             return
 
-        logger.info("Loading %s with 4-bit quantization...", self._model_name)
-
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4",
-        )
-
-        self._tokenizer = AutoTokenizer.from_pretrained(
-            self._model_name, trust_remote_code=True,
-        )
-        if self._tokenizer.pad_token is None:
-            self._tokenizer.pad_token = self._tokenizer.eos_token
-            self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
-
         torch.cuda.empty_cache()
 
-        self._model = AutoModelForCausalLM.from_pretrained(
-            self._model_name,
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-        )
+        if self._quantization == "gptq_marlin":
+            self._load_gptq_marlin()
+        else:
+            self._load_nf4()
+
         self._model.eval()
         logger.info("Model loaded. Device: %s", next(self._model.parameters()).device)
 
@@ -101,6 +93,48 @@ class FieldAwareLLM:
             "VRAM after load: allocated=%.0fMiB, reserved=%.0fMiB",
             torch.cuda.memory_allocated() / 1024**2,
             torch.cuda.memory_reserved() / 1024**2,
+        )
+
+    def _load_gptq_marlin(self) -> None:
+        """Load GPTQ model with Marlin kernel (W4A16 fused GEMV)."""
+        from gptqmodel import GPTQModel
+
+        logger.info("Loading %s with GPTQ+Marlin...", self._gptq_model)
+        wrapper = GPTQModel.load(
+            self._gptq_model, device_map="auto", backend="marlin",
+        )
+        self._model = wrapper.model
+
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self._gptq_model, trust_remote_code=True,
+        )
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+            self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
+
+    def _load_nf4(self) -> None:
+        """Load model with bitsandbytes NF4 quantization (legacy)."""
+        from transformers import BitsAndBytesConfig
+
+        logger.info("Loading %s with NF4 quantization...", self._model_name)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+        )
+
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self._model_name, trust_remote_code=True,
+        )
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+            self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
+
+        self._model = AutoModelForCausalLM.from_pretrained(
+            self._model_name,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
         )
 
     def unload(self) -> None:

@@ -129,13 +129,17 @@ class Orchestrator:
         # FieldAwareLLM (lazy load — will be loaded on first use)
         self.llm: FieldAwareLLM | None = None
         if ll_cfg.get("use_llm", False):
+            llm_cfg = ll_cfg.get("llm", {})
+            quantization = llm_cfg.get("quantization", "gptq_marlin")
             debug_cfg = config.get("debug", {})
             disable_tq = debug_cfg.get("disable_turboquant", False)
-            kv_bits = 0 if disable_tq else 4
+            kv_bits_default = llm_cfg.get("kv_cache_bits", 0)
+            kv_bits = 0 if disable_tq else kv_bits_default
             self.llm = FieldAwareLLM(
-                model_name=ll_cfg.get("transformers_model", "Qwen/Qwen3-8B"),
+                model_name=llm_cfg.get("transformers_model", "Qwen/Qwen3-8B"),
                 kv_cache_bits=kv_bits,
-                max_new_tokens=128 if disable_tq else 512,
+                quantization=quantization,
+                gptq_model=llm_cfg.get("gptq_model", "AlphaGaO/Qwen3-8B-GPTQ"),
             )
 
         # Dialogue manager
