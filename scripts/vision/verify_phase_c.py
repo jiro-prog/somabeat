@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import timedelta
 from pathlib import Path
 
 import numpy as np
@@ -74,9 +75,9 @@ async def verify_vision_emit_and_sense(field, encoder):
 
     logger.info("C-5b PASS")
 
-    # Cleanup: purge test signals
+    # Cleanup: purge old test signals by age
     from shared_state.interface import PurgeCriteria
-    await field.purge(PurgeCriteria(origin_system="sensory:vision"))
+    await field.purge(PurgeCriteria(older_than=timedelta(seconds=1)))
 
 
 def verify_latency(encoder):

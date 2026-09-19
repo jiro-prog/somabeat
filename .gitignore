@@ -92,3 +92,12 @@ htmlcov/
 
 # Claude Code local data
 .claude/
+
+# 独立リポジトリ SleepyJean のローカル作業コピー（本リポジトリの一部ではない）
+old_sleepyjean/
+
+# ランタイム ChromaDB（SleepyJean ブリッジ用）
+data/sleepyjean_chromadb/
+
+# Bot ランタイムログ
+data/bot.log

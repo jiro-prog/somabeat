@@ -420,64 +420,6 @@ class TestSelectRotationQA:
         selected = select_rotation_qa(pairs, max_count=8)
         assert len(selected) == 8
 
-    def test_emit_qa_pairs_respects_limit(self):
-        """Integration test: _emit_qa_pairs respects max_qa limit."""
-        from bridge.wake_export import _emit_qa_pairs
-
-        async def run():
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # Create fake JSONL with many entries
-                from datetime import date
-                today_dir = Path(tmpdir) / date.today().isoformat()
-                today_dir.mkdir()
-
-                for topic in ["physics", "biology"]:
-                    fpath = today_dir / f"sft_{topic}.jsonl"
-                    with open(fpath, "w") as f:
-                        for i in range(12):
-                            record = {"instruction": f"{topic} question {i}", "output": f"answer {i}"}
-                            f.write(json.dumps(record) + "\n")
-
-                field = _make_field()
-                count = await _emit_qa_pairs(field, MockEncoder(), tmpdir, max_qa=8)
-                assert count <= 8
-
-                snap = await field.snapshot()
-                assert snap.total_count <= 8
-
-        asyncio.get_event_loop().run_until_complete(run())
-
-    def test_emit_qa_pairs_stores_output_in_extra(self):
-        """Q&A signals should store instruction and output in signal.extra."""
-        from bridge.wake_export import _emit_qa_pairs
-
-        async def run():
-            with tempfile.TemporaryDirectory() as tmpdir:
-                from datetime import date
-                today_dir = Path(tmpdir) / date.today().isoformat()
-                today_dir.mkdir()
-
-                fpath = today_dir / "sft_test.jsonl"
-                with open(fpath, "w") as f:
-                    record = {"instruction": "What is Python?", "output": "A programming language"}
-                    f.write(json.dumps(record) + "\n")
-
-                field = _make_field()
-                encoder = MockEncoder()
-                count = await _emit_qa_pairs(field, encoder, tmpdir, max_qa=8)
-                assert count == 1
-
-                # Perceive and verify extra contains output
-                perception = await field.perceive(PerceiveParams(max_signals=10, min_strength=0.0))
-                assert len(perception.signals) == 1
-
-                sig = perception.signals[0].signal
-                assert sig.extra.get("instruction") == "What is Python?"
-                assert sig.extra.get("output") == "A programming language"
-
-        asyncio.get_event_loop().run_until_complete(run())
-
-
 class TestPurgePolicy:
     """Tests for purge in orchestrator (T14)."""
 

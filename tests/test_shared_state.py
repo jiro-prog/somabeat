@@ -106,7 +106,7 @@ class TestDataclasses:
     def test_purge_criteria(self):
         c = PurgeCriteria(older_than=timedelta(days=7))
         assert c.older_than == timedelta(days=7)
-        assert c.origin_system is None
+        assert c.max_signals_to_purge is None
 
     def test_purge_result(self):
         r = PurgeResult(purged_count=5, remaining_count=95)

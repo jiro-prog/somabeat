@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -36,19 +37,20 @@ def _make_config(tmpdir: str) -> dict:
             },
         },
         "sleepyjean": {
-            "root_path": tmpdir,
-            "night_cycle_script": "night_cycle.py",
-            "db_path": str(Path(tmpdir) / "sodateai.db"),
-            "knowledge_index_path": str(Path(tmpdir) / "ki.json"),
+            "memory": {
+                "chromadb_collection": "test_sj_memory",
+                "sqlite_path": str(Path(tmpdir) / "sj_memory.db"),
+            },
+            "recall": {"n_results": 3, "min_similarity": 0.3, "base_norm": 1.5},
+            "reconsolidation": {"min_cluster_size": 3},
+            "gap": {"min_repeat_count": 2},
+            "quality": {"min_answer_length": 50},
         },
     }
 
 
 class MockEncoder:
-    """Fast mock encoder to avoid loading the real model in tests.
-
-    Uses seeded random for deterministic vectors.
-    """
+    """Fast mock encoder to avoid loading the real model in tests."""
     dimensionality = 384
 
     def _vec(self, text):
@@ -74,34 +76,6 @@ class TestOrchestratorState:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = _make_config(tmpdir)
 
-            # Create required files for bridge
-            ki_path = Path(tmpdir) / "ki.json"
-            ki_path.write_text(json.dumps({"topics": [], "open_questions": []}))
-
-            # Create SleepyJean DB
-            async def setup_sj_db():
-                async with aiosqlite.connect(config["sleepyjean"]["db_path"]) as db:
-                    await db.execute("""
-                        CREATE TABLE IF NOT EXISTS conversations (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            channel_id TEXT NOT NULL, user_id TEXT NOT NULL,
-                            role TEXT NOT NULL, content TEXT NOT NULL,
-                            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-                        )
-                    """)
-                    await db.execute("""
-                        CREATE TABLE IF NOT EXISTS homework (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            theme TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
-                            requested_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-                            completed_at TEXT, result_summary TEXT,
-                            retry_count INTEGER NOT NULL DEFAULT 0
-                        )
-                    """)
-                    await db.commit()
-
-            asyncio.get_event_loop().run_until_complete(setup_sj_db())
-
             with patch("orchestrator.orchestrator.E5SmallEncoder", return_value=MockEncoder()):
                 orch = Orchestrator(config)
 
@@ -122,43 +96,19 @@ class TestOrchestratorState:
 
 
 class TestOrchestratorErrorHandling:
-    def test_night_cycle_failure_skips_wake_export(self):
-        """When night cycle fails, wake_export is skipped but system still wakes up."""
+    def test_reconsolidation_failure_still_wakes(self):
+        """When Reconsolidation fails, system still wakes up."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = _make_config(tmpdir)
-
-            ki_path = Path(tmpdir) / "ki.json"
-            ki_path.write_text(json.dumps({"topics": [], "open_questions": []}))
-
-            async def setup_sj_db():
-                async with aiosqlite.connect(config["sleepyjean"]["db_path"]) as db:
-                    await db.execute("""
-                        CREATE TABLE IF NOT EXISTS conversations (
-                            id INTEGER PRIMARY KEY, channel_id TEXT, user_id TEXT,
-                            role TEXT, content TEXT, created_at TEXT DEFAULT (datetime('now', 'localtime'))
-                        )
-                    """)
-                    await db.execute("""
-                        CREATE TABLE IF NOT EXISTS homework (
-                            id INTEGER PRIMARY KEY, theme TEXT,
-                            status TEXT DEFAULT 'queued',
-                            requested_at TEXT DEFAULT (datetime('now', 'localtime')),
-                            completed_at TEXT, result_summary TEXT,
-                            retry_count INTEGER DEFAULT 0
-                        )
-                    """)
-                    await db.commit()
-
-            asyncio.get_event_loop().run_until_complete(setup_sj_db())
 
             with patch("orchestrator.orchestrator.E5SmallEncoder", return_value=MockEncoder()):
                 orch = Orchestrator(config)
 
-                # Mock night cycle to return failure
-                async def mock_night_cycle():
-                    return 1  # failure
-
-                orch._run_night_cycle = mock_night_cycle
+                # Force Reconsolidation to fail
+                if orch.sleepyjean is not None:
+                    orch.sleepyjean.on_sleep = AsyncMock(
+                        side_effect=RuntimeError("test failure"),
+                    )
 
                 async def run():
                     await orch.dialogue.init_db()

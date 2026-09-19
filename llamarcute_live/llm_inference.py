@@ -56,6 +56,7 @@ class FieldAwareLLM:
         self._model = None
         self._tokenizer = None
         self._compressor = None
+        self._gptq_wrapper = None  # GPTQModel wrapper (prevents GC if orphaned)
         self._model_patched = False
         self._base_text_norm: float | None = None  # calibrated on first inference
 
@@ -104,6 +105,7 @@ class FieldAwareLLM:
             self._gptq_model, device_map="auto", backend="marlin",
         )
         self._model = wrapper.model
+        self._gptq_wrapper = wrapper  # prevent orphaned ref from blocking GC
 
         self._tokenizer = AutoTokenizer.from_pretrained(
             self._gptq_model, trust_remote_code=True,
@@ -138,18 +140,71 @@ class FieldAwareLLM:
         )
 
     def unload(self) -> None:
-        """Free GPU memory."""
+        """Free GPU memory.
+
+        GPTQModel/accelerate register forward hooks and dispatch wrappers that
+        create hidden reference cycles (wrapper ↔ model ↔ hooks).  A single
+        gc.collect() intermittently fails to break these.  Strategy:
+          1. Remove accelerate dispatch hooks (severs hook→model refs)
+          2. Delete wrapper, model, tokenizer (severs our refs)
+          3. gc.collect() twice (generation-0 survivors promoted then swept)
+          4. Synchronize CUDA, then empty_cache()
+          5. Verify — warn if VRAM was not actually freed
+        """
+        import gc
+
         if self._model is not None:
+            # 1. Remove accelerate dispatch hooks that hold model references
+            try:
+                from accelerate.hooks import remove_hook_from_submodules
+                remove_hook_from_submodules(self._model)
+            except Exception:
+                pass  # accelerate not used (e.g. NF4) or already clean
+
+            # 2. Sever all references: wrapper first, then model
+            self._model_patched = False
+            self._base_text_norm = None
+            if self._compressor is not None:
+                del self._compressor
+                self._compressor = None
+            if self._gptq_wrapper is not None:
+                del self._gptq_wrapper
+                self._gptq_wrapper = None
             del self._model
             del self._tokenizer
             self._model = None
             self._tokenizer = None
-            self._model_patched = False
-            if self._compressor is not None:
-                del self._compressor
-                self._compressor = None
+
+            # 3. Two-pass GC: first pass collects generation-0 cycles,
+            #    second pass sweeps survivors promoted to older generations
+            gc.collect()
+            gc.collect()
+
+            # 4. Ensure all CUDA ops complete, then release allocator pages
+            torch.cuda.synchronize()
             torch.cuda.empty_cache()
-            logger.info("Model unloaded, GPU memory freed.")
+
+            allocated = torch.cuda.memory_allocated() / 1024**2
+            reserved = torch.cuda.memory_reserved() / 1024**2
+            logger.info(
+                "Model unloaded. VRAM after release: allocated=%.0fMiB, reserved=%.0fMiB",
+                allocated, reserved,
+            )
+
+            # 5. Warn if VRAM was not freed (likely dangling reference)
+            if allocated > 100:
+                logger.warning(
+                    "VRAM leak detected: %.0fMiB still allocated after unload. "
+                    "Forcing gc.collect() with debug.",
+                    allocated,
+                )
+                gc.collect()
+                torch.cuda.empty_cache()
+                allocated2 = torch.cuda.memory_allocated() / 1024**2
+                logger.warning(
+                    "After extra gc pass: allocated=%.0fMiB (delta=%.0fMiB)",
+                    allocated2, allocated - allocated2,
+                )
 
     @property
     def _embed_layer(self):
@@ -158,6 +213,23 @@ class FieldAwareLLM:
     @property
     def _model_device(self):
         return next(self._model.parameters()).device
+
+    def _postprocess(self, output_ids: torch.Tensor) -> str:
+        """Decode output tokens and strip thinking blocks + special tokens.
+
+        Shared by generate_with_field() and generate_bare().
+        """
+        import re
+
+        raw = self._tokenizer.decode(
+            output_ids[0], skip_special_tokens=False,
+        )
+        # Strip closed and unclosed thinking blocks
+        response = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
+        response = re.sub(r"<think>.*", "", response, flags=re.DOTALL)
+        # Strip Qwen3 special tokens (<|im_start|>, <|im_end|>, <|endoftext|>, etc.)
+        response = re.sub(r"<\|[^|]*\|>", "", response)
+        return response.strip()
 
     async def generate_with_field(
         self,
@@ -184,8 +256,6 @@ class FieldAwareLLM:
 
         try:
             self.load()
-
-            import re
 
             device = self._model_device
             embed_layer = self._embed_layer
@@ -303,17 +373,7 @@ class FieldAwareLLM:
             with torch.no_grad():
                 output_ids = self._model.generate(**generate_kwargs)
 
-            # Decode with skip_special_tokens=False to preserve <think> tags,
-            # then strip thinking blocks, then remove remaining special tokens.
-            raw = self._tokenizer.decode(
-                output_ids[0], skip_special_tokens=False,
-            )
-            # Strip closed and unclosed thinking blocks
-            response = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
-            response = re.sub(r"<think>.*", "", response, flags=re.DOTALL)
-            # Strip Qwen3 special tokens (<|im_start|>, <|im_end|>, <|endoftext|>, etc.)
-            response = re.sub(r"<\|[^|]*\|>", "", response)
-            response = response.strip()
+            response = self._postprocess(output_ids)
 
             duration = time.monotonic() - start
             n_field = field_embeddings.shape[0] if field_embeddings is not None else 0
@@ -331,6 +391,92 @@ class FieldAwareLLM:
 
         except Exception as e:
             logger.error("FieldAwareLLM error: %s", e)
+            return None, time.monotonic() - start
+
+    async def generate_bare(
+        self,
+        system_prompt: str,
+        user_input: str,
+        max_new_tokens: int | None = None,
+        temperature: float | None = None,
+        repetition_penalty: float = 1.3,
+        no_think: bool = True,
+    ) -> tuple[str | None, float]:
+        """Generate without field embedding injection.
+
+        Uses input_ids directly (no inputs_embeds). For sleep-time tasks
+        such as triple extraction, self-improvement fitness/cuteness eval,
+        and wake message generation.
+
+        Args:
+            system_prompt: System prompt text.
+            user_input: User message text.
+            max_new_tokens: Override default max tokens.
+            temperature: Override default temperature.
+            repetition_penalty: Repetition penalty (default 1.3).
+            no_think: Append /no_think to system content (default True).
+
+        Returns:
+            (response_text, duration_seconds). response_text is None on error.
+        """
+        start = time.monotonic()
+
+        try:
+            self.load()
+
+            device = self._model_device
+            max_tok = max_new_tokens or self._max_new_tokens
+            temp = temperature or self._temperature
+
+            sys_content = system_prompt
+            if no_think:
+                sys_content += "\n/no_think"
+
+            messages = [
+                {"role": "system", "content": sys_content},
+                {"role": "user", "content": user_input},
+            ]
+
+            input_ids = self._tokenizer.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                return_tensors="pt",
+            )["input_ids"].to(device)
+
+            attention_mask = torch.ones_like(input_ids)
+
+            generate_kwargs = dict(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=max_tok,
+                do_sample=temp > 0,
+                temperature=temp if temp > 0 else 1.0,
+                top_p=0.9,
+                repetition_penalty=repetition_penalty,
+                pad_token_id=self._tokenizer.pad_token_id,
+            )
+
+            with torch.no_grad():
+                output_ids = self._model.generate(**generate_kwargs)
+
+            # Strip input tokens — model.generate() with input_ids returns
+            # the full sequence (input + generated). Only decode new tokens.
+            n_input = input_ids.shape[1]
+            new_token_ids = output_ids[:, n_input:]
+            response = self._postprocess(new_token_ids)
+
+            duration = time.monotonic() - start
+            n_output = output_ids.shape[1]
+            n_new = new_token_ids.shape[1]
+            tps = n_new / duration if duration > 0 else 0
+            logger.info(
+                "generate_bare: %d chars, %.1fs, %.1f tok/s (input=%d, new=%d)",
+                len(response), duration, tps, n_input, n_new,
+            )
+            return response, duration
+
+        except Exception as e:
+            logger.error("generate_bare error: %s", e)
             return None, time.monotonic() - start
 
     async def generate_text_only(

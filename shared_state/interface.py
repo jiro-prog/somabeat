@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol, runtime_checkable
 
@@ -29,30 +29,29 @@ class SignalOrigin:
     context: str      # e.g. "dialogue", "difficulty", "knowledge_update"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Signal:
     """A unit of information emitted into the shared field.
 
-    The embedding is NOT normalized — its L2 norm carries "concentration" semantics.
+    Immutable. The embedding is NOT normalized — its L2 norm carries
+    "concentration" semantics.  No text or extra metadata fields exist;
+    the field carries embeddings only (design principle 5.3).
     """
     signal_id: str
     embedding: NDArray[np.float32]   # non-normalized vector
     emitted_at: datetime
     origin: SignalOrigin
-    extra: dict = field(default_factory=dict)  # optional metadata (e.g. rotation Q&A output)
 
     @staticmethod
     def create(
         embedding: NDArray[np.float32],
         origin: SignalOrigin,
-        extra: dict | None = None,
     ) -> Signal:
         return Signal(
             signal_id=uuid.uuid4().hex,
             embedding=embedding,
             emitted_at=datetime.now(),
             origin=origin,
-            extra=extra or {},
         )
 
 
@@ -80,6 +79,7 @@ class PerceiveParams:
     min_strength: float = 0.1
     max_signals: int = 50
     time_horizon: timedelta | None = None  # None → no time cutoff
+    strength_exponent: float = 0.5  # Weber-Fechner: strength = decay × norm^α
 
 
 @dataclass(frozen=True)
@@ -140,10 +140,12 @@ class ExponentialDecay:
 
 @dataclass
 class PurgeCriteria:
-    """Criteria for removing signals from the field."""
+    """Criteria for removing signals from the field.
+
+    Origin-based filtering is intentionally absent — the non-directionality
+    principle (design principle 2) applies to purge as well as perceive.
+    """
     older_than: timedelta | None = None
-    origin_system: str | None = None
-    origin_context: str | None = None
     max_signals_to_purge: int | None = None
 
 
@@ -288,9 +290,6 @@ class FieldObserver(Protocol):
         ...
 
     def on_perceive(self, perception: FieldPerception) -> None:
-        ...
-
-    def on_sense(self, reading: FieldReading, query_text: str | None) -> None:
         ...
 
     def on_purge(self, result: PurgeResult) -> None:

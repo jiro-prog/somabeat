@@ -58,7 +58,7 @@ def _mock_orchestrator(state=SystemState.AWAKE):
 
     # Config
     orch.config = {
-        "llamarcute_live": {"ollama_model": "qwen3:8b"},
+        "llamarcute_live": {},
         "notifications": {"wake_enabled": True},
     }
 

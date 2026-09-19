@@ -24,7 +24,6 @@ from shared_state.backends.chromadb_backend import ChromaDBField
 from shared_state.emit_log import insert_emit_log
 from shared_state.encoder import E5SmallEncoder
 from shared_state.interface import (
-    PurgeCriteria,
     Signal,
     SignalOrigin,
 )
@@ -363,17 +362,10 @@ async def execute_repair(
                 await insert_emit_log(db_path, signal.signal_id, emit_text)
             result["actions"].append("Emitted rollback record to field")
 
-            # 3. Purge stale self_improvement signals
-            purge_result = await field.purge(PurgeCriteria(
-                origin_context="self_improvement",
-            ))
-            result["actions"].append(
-                f"Purged {purge_result.purged_count} stale self_improvement signals"
-            )
-            logger.info(
-                "IMMUNE: Purged %d self_improvement signals after rollback",
-                purge_result.purged_count,
-            )
+            # Note: stale self_improvement signals are left to natural time-decay
+            # rather than origin-based purge (non-directionality principle).
+            # The rollback signal emitted above has high norm (2.5) and will
+            # dominate perception until self_improvement signals decay away.
         else:
             logger.error("IMMUNE CRITICAL: No valid backup found for rollback!")
             result["actions"].append("No valid backup for rollback")

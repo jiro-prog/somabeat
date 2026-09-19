@@ -130,7 +130,7 @@ integrated-system: Somabeatの統合システム。Discord Bot (Sleepy Jean) を
 - `discord_bot/` — Discord Bot エントリポイント
 - `orchestrator/` — システム統合・ライフサイクル管理
 - `shared_state/` — SharedField, FieldReceptor, TurboQuant, MultimodalEncoder
-- `sleepyjean/` — 夜間学習サイクル (外部リポジトリ)
+- `sleepyjean/` — 海馬モジュール (KnowledgeGraph, TripleExtractor, MemoryStore, RecallEngine, Reconsolidation, GapDetector, QualityGate。覚醒時は非LLM、睡眠時のトリプル抽出のみgenerate_bare使用)
 - `config/system.yaml` — 全体設定
 
 ## LLM推論
@@ -142,23 +142,53 @@ integrated-system: Somabeatの統合システム。Discord Bot (Sleepy Jean) を
 - config切り替え: `llamarcute_live.llm.quantization` で nf4/gptq_marlin 選択可能
 
 ## 推論エンジンの使い分け
-- 場のembeddingを受け取る認知機能 → FieldAwareLLM（inputs_embeds注入）
-- 場を読まないユーティリティ → Ollama
-- VRAM排他制御: FieldAwareLLM.unload() → Ollama → Ollama keep_alive:0 → FieldAwareLLM.load()
+- 場のembeddingを受け取る認知機能 → FieldAwareLLM.generate_with_field()（inputs_embeds注入）
+- 場を読まないユーティリティ（自己改善のfitness/cuteness評価、wake message） → FieldAwareLLM.generate_bare()（input_idsベース）
+- SleepyJean → LLM不使用（HDBSCAN + FieldEncoder のみ）
+- Ollama依存は完全除去済み。モデルは常駐、VRAM排他制御不要
 
 ## 重要な設計判断
 - 行動規範は英語で記述（LLMの指示追従性が英語で最も高い）
 - 不変制約はbuild_prompt()にハードコード（自己改善スクリプトからアクセス不能にする）
 - GPTQ量子化でもNF4同様の軽微なトークン崩壊（低頻度外来語）は受容見込み
 - FR出力ノルムはL2正規化不可、一律スケーリングで保持
+- 覚醒メッセージはReconsolidation結果+dialogue_logsを直接generate_bareに渡す（場のsenseを経由しない。テキスト情報はテキスト空間で処理が正当）
 
 ## テスト
-- `python -m pytest tests/` (225件)
+- `python -m pytest tests/` (277件)
 - テスト失敗はスキップせず修正する
+
+## 設計適合監査
+
+二層構造で設計原則違反を防止する。
+
+### 第1層: 構造チェック（自動）
+- `scripts/check_design_invariants.py` — 既知の8種類の設計原則違反を検出
+- Claude Code hook で shared_state/ bridge/ への編集時に自動実行（違反時はブロック）
+- orchestrator が wake_up 時に4サイクルに1回実行（config: `design_check.interval_cycles`）
+
+### 第2層: 意味的レビュー（手動）
+- `/design-conformance` スキルで architect サブエージェント込みの深いレビュー
+- **運用指針: 睡眠サイクル3〜5回に1回は実行すること**
+- 第1層がカバーしない「新しい種類の違反」を発見する役割
+- 新しい違反パターンを発見したら `check_design_invariants.py` にルールを追加して第1層に昇格させる
 
 ## debug設定 (config/system.yaml)
 - `debug.empty_perceive`: perceive結果を空にする（field embedding切り分け用）
 - `debug.disable_turboquant`: TurboQuant無効化（現在デフォルト無効。NF4使用時のみ関連）
+
+---
+
+## 変更の横展開ルール
+
+パラメータ・関数シグネチャ・データ構造を変更するとき、**コードの変更前に**以下を実行する:
+
+1. **config確認:** `config/system.yaml` で当該パラメータが設定されていないか確認する。コードのデフォルト値だけを見て安心しない
+2. **全出現検索:** `grep -r 'パラメータ名' . --include='*.py' --include='*.yaml'` で全出現を洗い出す
+3. **呼び出し元追跡:** 関数シグネチャを変えたら、全call siteを更新する。`grep -r '関数名' . --include='*.py'` で漏れなく確認
+4. **変更リスト作成:** 変更が必要な全箇所をリスト化してから着手する。1箇所ずつ直しながら探すな
+
+configとコードのデフォルト値が二重管理になっている場合、**configが真**。コードのデフォルト値はconfigが未設定時のフォールバックにすぎない。
 
 ---
 
@@ -173,6 +203,11 @@ integrated-system: Somabeatの統合システム。Discord Bot (Sleepy Jean) を
 - [ ] エスカレーション基準に該当しないか
 - [ ] 変数は1つだけ変えているか
 - [ ] 結果を表形式で記録したか
+
+### 変更時
+- [ ] config/system.yaml の実際の値を確認したか
+- [ ] 全出現箇所を grep で洗い出したか
+- [ ] 全call siteを更新したか
 
 ### 終了時
 - [ ] 全テストがPASSしているか

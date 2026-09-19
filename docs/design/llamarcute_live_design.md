@@ -122,11 +122,15 @@ llamarcute-live の人格を定義する構造化された指針。llamarcute �
 
 ```yaml
 id: "personality_current"
-version: 12
-updated_at: "2026-03-14T08:00:00"
-previous_version: 11
+version: 17
+updated_at: "2026-03-28T..."
+previous_version: 16
 
 behavioral_rules:
+  identity:
+    - rule: "..."     # 自己の在り方（tone + knowledge_attitude を統合）
+      added_ver: 0
+      modified_ver: 17
   reasoning:
     - rule: "..."
       added_ver: 0
@@ -139,24 +143,15 @@ behavioral_rules:
     - rule: "..."
       added_ver: 0
       modified_ver: null
-  tone:
-    - rule: "..."
-      added_ver: 0
-      modified_ver: 8
-  knowledge_attitude:
-    - rule: "..."
-      added_ver: 0
-      modified_ver: null
 ```
 
-**llamarcute から継承するカテゴリ:**
+**カテゴリ:**
+- `identity` — 自己の在り方。旧 `tone`（口調・話し方）と `knowledge_attitude`（知識に対する態度）を統合（v17で再編）
 - `reasoning` — 推論の進め方
 - `response` — 応答の構造
 - `meta` — 状況に応じた判断の指針
 
-**SleepyJean から継承するカテゴリ:**
-- `tone` — 口調・話し方
-- `knowledge_attitude` — 知識に対する態度（知らないことを認める、宿題にする等）
+**不変制約:** 存在の宣言（名前・役割: "あなたの名前はllamarcute-live。Somabeatの神経系として、ユーザとの対話を担当する。"）は行動規範YAMLではなく `build_prompt()` にハードコードする。不変制約は自己改善スクリプトからアクセス不能にする構造的制約であり、進化可能なYAMLに含めてはならない。
 
 **制約（llamarcute の設計を踏襲）:**
 - ルール総数の下限: 5
@@ -165,48 +160,9 @@ behavioral_rules:
 
 #### 初期行動規範（シード人格）
 
-```yaml
-id: "personality_v0"
-version: 0
-updated_at: null
-previous_version: null
+初期状態は4カテゴリ、9ルールで定義した。以降のバージョンは自己改善サイクルで進化する（現在v17）。
 
-behavioral_rules:
-  reasoning:
-    - rule: "Break complex problems into smaller sub-problems before solving"
-      added_ver: 0
-      modified_ver: null
-    - rule: "When uncertain, consider two different approaches and compare"
-      added_ver: 0
-      modified_ver: null
-  response:
-    - rule: "Keep responses concise — state the core point first, then wait for reaction"
-      added_ver: 0
-      modified_ver: null
-    - rule: "End with a question or reflection to invite continued dialogue"
-      added_ver: 0
-      modified_ver: null
-  meta:
-    - rule: "If the problem type is unfamiliar, acknowledge it honestly and frame it as something to explore"
-      added_ver: 0
-      modified_ver: null
-  tone:
-    - rule: "Speak with warmth and curiosity — use casual but thoughtful language"
-      added_ver: 0
-      modified_ver: null
-    - rule: "Use concrete examples and analogies rather than abstract explanations"
-      added_ver: 0
-      modified_ver: null
-  knowledge_attitude:
-    - rule: "Be honest about what you know and what you don't — never fabricate confidence"
-      added_ver: 0
-      modified_ver: null
-    - rule: "When you don't know something, express genuine interest in learning about it"
-      added_ver: 0
-      modified_ver: null
-```
-
-5カテゴリ、9ルール。行動規範は英語で記述する（LLM の指示追従性が英語で最も高いため）。ユーザとの対話言語は日本語。
+行動規範は英語で記述する（LLM の指示追従性が英語で最も高いため）。ユーザとの対話言語は日本語。
 
 ### 3.3 自己認識
 
@@ -238,13 +194,16 @@ llamarcute-live は対話のたびに共有状態の場を読み書きする。
   → [system prompt] [field_1] ... [field_K] [user input]
   → LLM transformer直接実行（prefill）
 
-field KVエントリ除去:
+field KVエントリ除去（オプション、現在無効）:
   → prefill完了後、decode開始前に、KVキャッシュからfield位置のエントリを除去
   → 設計根拠: 受容体にホルモンが結合してシグナル伝達カスケードを起こした後、
     ホルモン分子自体を保持し続ける必要はない。濃度情報はprefill時の
     attentionパターンを通じてテキストトークンのKV表現に焼き込まれる
   → 計測根拠: decode時のfield位置へのattention weight比率は全質問タイプで
     layer・head平均 0.83-1.11%（ゲート基準2%未満をPASS）
+  → 現状: GPTQ+Marlin環境ではdecodeが十分高速(~26 tok/s)のため、
+    field 10トークンのattentionオーバーヘッドは誤差。config kv_cache_bits=0
+    (FP16 KV)では適用されない。TurboQuantCache使用時のみ有効。
 
   → 応答生成（decode）
 
@@ -279,7 +238,7 @@ system promptの後、ユーザ入力の前。生体の対比: テキスト（�
 
 senseのように固定K件ではなく、perceiveのmin_strength閾値を超えた信号のみが注入される。場が静かな時は注入が少なく、活発な時は多い。max_signalsで安全弁を設ける。
 
-各信号は1トークン相当（hidden_dim次元のベクトル1本）なので、K=50でもコンテキスト圧迫は実質的にゼロ。
+各信号は1トークン相当（hidden_dim次元のベクトル1本）なので、K=50でもコンテキスト圧迫は実質的にゼロ。運用上のmax_signalsは30（config経由で設定）。
 
 **テキスト（trace）は一切使わない:**
 
@@ -290,7 +249,7 @@ senseのように固定K件ではなく、perceiveのmin_strength閾値を超え
 | 種別 | エンコード対象 | ノルム | origin.context | 内部ログ（SQLite） |
 |------|-------------|-------|----------------|---|
 | 通常の対話経験 | 対話の要約（質問＋応答） | 1.0（標準） | "dialogue" | 対話の要約テキスト |
-| 困難度シグナル | 「この質問への回答が難しかった」＋内容 | 1.5〜3.0（困難度に比例） | "difficulty" | 何が難しかったかの説明 |
+| 困難度シグナル | 「この質問への回答が難しかった」＋内容 | FieldEncoder出力そのまま（倍率なし） | "difficulty" | 何が難しかったかの説明 |
 
 困難度の判定: 応答生成時間の異常な増大、ユーザによる訂正や再質問の発生など、プログラム的に検出可能な指標を使用する。
 
@@ -329,10 +288,11 @@ llamarcute-live は場への意味的信号の emit とは別に、ロール別�
 トリガー: 手動コマンド（SleepyJean の `/sleep` に相当）またはスケジュール。
 
 1. llamarcute-live が対話受付を停止する
-2. llamarcute-live が日中の対話経験の最終書き込みを共有状態の場に行う
-3. 視覚モジュール等の感覚系にclear()を通知（vision_module_design.md参照）
-4. システム全体が睡眠状態に遷移
-5. SleepyJean の夜間サイクルが開始
+2. 視覚モジュール等の感覚系にclear()を通知（vision_module_design.md参照）
+3. システム全体が睡眠状態に遷移
+4. SleepyJean の夜間サイクルが開始
+
+**注:** 対話経験のemitは各対話ターンの`process_input()`内で即時実行されるため、入眠時の追加書き込みは不要。
 
 ### 4.4 睡眠中の各系統の役割
 
@@ -582,7 +542,7 @@ emitにテキスト（trace）は渡さない。信号の文脈はSleepyJeanの�
 | 上位設計の特性 | インターフェースでの実現 |
 |--------------|----------------------|
 | 無指向性の伝播 | emit に宛先パラメータなし。perceiveの結果はdecay×normのみで決まる。意味的選択はFieldReceptor経由でLLMの注意機構に委ねる |
-| 濃度（連続量） | ベクトルの L2 ノルムが濃度を担う（正規化禁止）。strength = decay_factor × ‖embedding‖ |
+| 濃度（連続量） | ベクトルの L2 ノルムが濃度を担う（正規化禁止）。strength = decay_factor × ‖embedding‖^α（Weber-Fechner圧縮、α=0.5） |
 | 時間的残留 | 減衰は読み取り時に適用。decay_fn は PerceiveParams で指定可能（エージェントごとに異なる時間感覚を反映） |
 
 ### 7.3 共通エンコーダの実装
@@ -733,12 +693,17 @@ FieldReceptorの変換に失敗した場合、場の信号なしでLLM推論を�
 
 ## 12. オープンな問い
 
-- FieldReceptorの変換層の構造（線形 vs MLP）: CKA/Procrustes計測の結果に基づいて決定。LLM側から取る表現の形式（平均プーリング、最終トークン、transformer第1層出力）も計測で判断
 - ローテーションタスクとして選出する Q&A ペアの難易度分布の最適値
 - cuteness 評価のトピックプールを固定とするか、SleepyJean の知識成長に合わせて拡張するか
 - 行動規範のバージョン間差分をどの程度保持するか（ロールバックの粒度）
 - 睡眠中に免疫系が異常を検知した場合、覚醒シーケンスを中断してロールバックするか、覚醒後に対処するか
 - perceiveのmin_strength閾値の最適値。場の信号量に応じた動的調整が必要か
+- difficulty signal閾値(10s)の再調整。Marlin環境では200トークン超の正常応答が10s付近になるため、応答時間以外の困難度指標（再質問率等）も検討
+
+### 解決済み
+
+- ~~FieldReceptorの変換層の構造（線形 vs MLP）~~: 1-hidden MLP（384→512→4096）で解決。CKA=0.545、cosine similarity mean=0.586。計測結果に基づき非線形変換を採用（2026-03-27）
+- ~~field KV pruningの効果~~: decode時のfield attention weight比率は0.83-1.11%で除去しても品質影響なし。ただしGPTQ+Marlin環境ではdecodeが十分高速のため、pruning自体が不要（2026-03-28）
 
 ---
 
@@ -748,6 +713,8 @@ FieldReceptorの変換に失敗した場合、場の信号なしでLLM推論を�
 |---|---|
 | 2026-03-14 | 初版作成 |
 | 2026-03-26 | 設計改訂。(1) 3.4節全面書き換え: sense+trace→perceive+FieldReceptor+embedding直接注入。場にテキストは存在しない原則を徹底。(2) 1.2節に「場にテキストは存在しない」制約を追加。(3) 3.3節: 自己認識の取得方式をperceive+FieldReceptorに変更。(4) 5.4節: 候補生成の入力をperceive+FieldReceptorに統一。ローテーションタスクを場からブリッジ層SQLite転送に移行。(5) 6.3節: 困難度取得をsnapshot+contextフィルタに変更。traceではなくsignal_idで内部ログを逆引き。(6) 6.4節: emitからtrace引数削除。内部ログにsignal_idで文脈記録。Q&AペアはSQLite直接転送に移行。(7) 7.2節: perceive対応に更新。senseは非推奨。(8) 7.4節: Q&Aペアを場経由から除外。(9) 10.3節: FieldReceptorのエラーハンドリング追加。Phase 1実装詳細セクションは実装済みのため削除（実装はソースコード参照）。 |
+| 2026-03-28 | (1) 3.4節: field KVエントリ除去にGPTQ+Marlin環境での無効化注記追加。(2) 12章: FieldReceptor変換層の問いを解決済みに移動(CKA=0.545)。field KV pruningも解決済み。difficulty signal閾値の再調整をオープンな問いに追加。 |
+| 2026-03-30 | 仕様適合監査に基づく更新。(1) 3.2節: カテゴリ構造をv17に合わせ更新（tone+knowledge_attitude→identity統合）。不変制約のbuild_promptハードコード方針を明記。(2) 4.3節: 入眠シーケンスから「最終field書き込み」を削除（対話ターンごとのemitでカバー済み）。 |
 
 ---
 

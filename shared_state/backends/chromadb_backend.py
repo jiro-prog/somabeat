@@ -5,7 +5,6 @@ Reference: llamarcute_live_design.md section 7.3, phase1_taskflow.md T3
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timedelta
 
@@ -68,8 +67,6 @@ class ChromaDBField:
             "emitted_at": signal.emitted_at.strftime(_ISO_FMT),
             "norm": norm,
         }
-        if signal.extra:
-            metadata["extra_json"] = json.dumps(signal.extra, ensure_ascii=False)
         self._collection.add(
             ids=[signal.signal_id],
             embeddings=[signal.embedding.tolist()],
@@ -107,17 +104,10 @@ class ChromaDBField:
             elapsed = now - emitted_at
             decay_factor = decay_fn(elapsed)
             norm = float(meta["norm"])
-            strength = decay_factor * norm
+            strength = decay_factor * (norm ** params.strength_exponent)
 
             if strength < params.min_strength:
                 continue
-
-            extra = {}
-            if "extra_json" in meta:
-                try:
-                    extra = json.loads(meta["extra_json"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
 
             signal = Signal(
                 signal_id=sid,
@@ -127,7 +117,6 @@ class ChromaDBField:
                     system=meta["origin_system"],
                     context=meta["origin_context"],
                 ),
-                extra=extra,
             )
             perceived.append(PerceivedSignal(
                 signal=signal,
@@ -196,12 +185,6 @@ class ChromaDBField:
             norm = float(meta["norm"])
             effective_weight = relevance * decay_factor * norm
 
-            extra = {}
-            if "extra_json" in meta:
-                try:
-                    extra = json.loads(meta["extra_json"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
             signal = Signal(
                 signal_id=sid,
                 embedding=np.array(embeddings[i], dtype=np.float32),
@@ -210,7 +193,6 @@ class ChromaDBField:
                     system=meta["origin_system"],
                     context=meta["origin_context"],
                 ),
-                extra=extra,
             )
             weighted.append(WeightedSignal(
                 signal=signal,
@@ -225,8 +207,6 @@ class ChromaDBField:
         reading = FieldReading(
             signals=weighted, observed_at=now, query_embedding=query_embedding,
         )
-        if self._observer:
-            self._observer.on_sense(reading, query_text=None)
         return reading
 
     async def purge(self, criteria: PurgeCriteria) -> PurgeResult:
@@ -246,10 +226,6 @@ class ChromaDBField:
             emitted_at = datetime.strptime(meta["emitted_at"], _ISO_FMT)
 
             if criteria.older_than and (now - emitted_at) < criteria.older_than:
-                match = False
-            if criteria.origin_system and meta["origin_system"] != criteria.origin_system:
-                match = False
-            if criteria.origin_context and meta["origin_context"] != criteria.origin_context:
                 match = False
 
             if match:
@@ -277,12 +253,6 @@ class ChromaDBField:
         for sid, emb, meta in zip(
             all_data["ids"], all_data["embeddings"], all_data["metadatas"]
         ):
-            extra = {}
-            if "extra_json" in meta:
-                try:
-                    extra = json.loads(meta["extra_json"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
             signals.append(Signal(
                 signal_id=sid,
                 embedding=np.array(emb, dtype=np.float32),
@@ -291,7 +261,6 @@ class ChromaDBField:
                     system=meta["origin_system"],
                     context=meta["origin_context"],
                 ),
-                extra=extra,
             ))
 
         return FieldSnapshot(

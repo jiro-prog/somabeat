@@ -23,7 +23,6 @@ from shared_state.interface import Signal, SignalOrigin
 logger = logging.getLogger(__name__)
 
 SLEEPYJEAN_ORIGIN = SignalOrigin(system="sleepyjean", context="knowledge_update")
-QA_ORIGIN = SignalOrigin(system="sleepyjean", context="rotation_task")
 DREAM_ORIGIN = SignalOrigin(system="sleepyjean", context="dream")
 
 
@@ -44,6 +43,7 @@ async def wake_export(
         "new_topics_emitted": 0,
         "confidence_changes_emitted": 0,
         "deleted_topics_emitted": 0,
+        "new_questions_emitted": 0,
         "qa_pairs_emitted": 0,
         "dream_signals_emitted": 0,
     }
@@ -124,12 +124,14 @@ async def wake_export(
                 await field.emit(signal)
                 if db_path:
                     await insert_emit_log(db_path, signal.signal_id, emit_text)
+                summary["new_questions_emitted"] += 1
 
         logger.info(
-            "wake_export: topics new=%d conf_change=%d deleted=%d",
+            "wake_export: topics new=%d conf_change=%d deleted=%d questions=%d",
             summary["new_topics_emitted"],
             summary["confidence_changes_emitted"],
             summary["deleted_topics_emitted"],
+            summary["new_questions_emitted"],
         )
 
     except Exception as e:
@@ -266,71 +268,6 @@ async def _transfer_qa_pairs(
         await db.commit()
 
     return len(selected)
-
-
-async def _emit_qa_pairs(
-    field: ChromaDBField,
-    encoder: E5SmallEncoder,
-    night_result_dir: str | Path,
-    max_qa: int = 8,
-    db_path: str | Path | None = None,
-) -> int:
-    """Emit quality-checked Q&A pairs from SleepyJean's training data.
-
-    Collects all valid Q&A pairs, selects a diverse subset (up to max_qa),
-    and emits only those to the shared field.
-    """
-    from datetime import date
-    import glob
-
-    today = date.today().isoformat()
-    pattern = str(Path(night_result_dir) / today / "sft_*.jsonl")
-    files = glob.glob(pattern)
-
-    # 1. Collect all valid Q&A pairs
-    all_pairs: list[dict] = []
-    for fpath in files:
-        source_file = Path(fpath).stem  # e.g. "sft_quantum_mechanics"
-        with open(fpath) as f:
-            for line in f:
-                try:
-                    record = json.loads(line.strip())
-                except json.JSONDecodeError:
-                    continue
-
-                instruction = record.get("instruction", "")
-                output = record.get("output", "")
-                if not instruction or not output:
-                    continue
-
-                all_pairs.append({
-                    "instruction": instruction,
-                    "output": output,
-                    "source_file": source_file,
-                })
-
-    logger.info(
-        "_emit_qa_pairs: Found %d Q&A pairs across %d files, selecting up to %d",
-        len(all_pairs), len(files), max_qa,
-    )
-
-    # 2. Select diverse subset
-    selected = select_rotation_qa(all_pairs, max_count=max_qa)
-
-    # 3. Emit selected pairs (instruction and output in extra)
-    count = 0
-    for qa in selected:
-        embedding = encoder.encode_for_emit(qa["instruction"])
-        signal = Signal.create(
-            embedding=embedding, origin=QA_ORIGIN,
-            extra={"instruction": qa["instruction"], "output": qa.get("output", "")},
-        )
-        await field.emit(signal)
-        if db_path:
-            await insert_emit_log(db_path, signal.signal_id, f"Q&A: {qa['instruction'][:80]}")
-        count += 1
-
-    return count
 
 
 async def _emit_dream_signals(

@@ -132,6 +132,48 @@ class TestDialogueManager:
             behavioral_pos = prompt.index("## 行動規範")
             assert immutable_pos < behavioral_pos
 
+    def test_build_prompt_with_recall_text(self):
+        """recall_textありのbuild_promptにテキストが含まれる"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dm, _ = _make_dialogue_manager(tmpdir)
+            recall = "あなたの記憶:\n- フォレトスはタイプがむし・はがね"
+            prompt = dm.build_prompt(recall_text=recall)
+            assert "あなたの記憶:" in prompt
+            assert "フォレトス" in prompt
+
+    def test_build_prompt_without_recall_text(self):
+        """recall_textなしのbuild_promptが従来通り動作"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dm, _ = _make_dialogue_manager(tmpdir)
+            prompt = dm.build_prompt(recall_text=None)
+            assert "あなたの記憶:" not in prompt
+            assert "## 不変制約" in prompt
+
+    def test_recall_text_after_rules(self):
+        """想起テキストが行動規範の後に配置される"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dm, _ = _make_dialogue_manager(tmpdir)
+            recall = "あなたの記憶:\n- テスト記憶"
+            prompt = dm.build_prompt(recall_text=recall)
+            rules_pos = prompt.index("## 行動規範")
+            recall_pos = prompt.index("あなたの記憶:")
+            assert rules_pos < recall_pos
+
+    def test_recall_text_reduces_conversation_budget(self):
+        """想起テキストがトークン予算を消費し会話バッファを圧迫する"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dm, _ = _make_dialogue_manager(tmpdir)
+            # Fill history
+            for i in range(20):
+                dm._history.append({"role": "user", "content": f"長めの会話 {i} " * 10})
+            prompt_no_recall = dm.build_prompt()
+            recall = "あなたの記憶:\n" + "\n".join(f"- 記憶{i}" for i in range(10))
+            prompt_with_recall = dm.build_prompt(recall_text=recall)
+            # With recall text, less conversation should fit
+            conv_no = prompt_no_recall.count("長めの会話")
+            conv_with = prompt_with_recall.count("長めの会話")
+            assert conv_with <= conv_no
+
     def test_stop_and_resume(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dm, _ = _make_dialogue_manager(tmpdir)

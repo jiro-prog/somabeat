@@ -420,11 +420,8 @@ class TestExecuteRepair:
         assert result["personality_rolled_back"]
         assert any("Rolled back" in a for a in result["actions"])
         assert any("conservative_mode" in a for a in result["actions"])
-        assert any("Purged" in a for a in result["actions"])
         # emit called for rollback record + conservative_mode = 2 calls
         assert field.emit.call_count == 2
-        # purge called once for self_improvement signals
-        field.purge.assert_called_once()
 
     def test_critical_no_backup(self, mock_field_encoder):
         field, encoder = mock_field_encoder

@@ -15,7 +15,7 @@ import numpy as np
 
 from shared_state.encoder import E5SmallEncoder
 
-from llamarcute_live import ollama_client
+from llamarcute_live.llm_inference import FieldAwareLLM
 from llamarcute_live.parser import grade_code, grade_logic, grade_math
 from llamarcute_live.personality import Personality
 
@@ -39,8 +39,8 @@ async def evaluate_fitness(
     core_tasks: list[dict],
     rotation_tasks: list[dict],
     encoder: E5SmallEncoder | None = None,
-    ollama_model: str = "qwen3:8b",
-    ollama_parallel: int = 2,
+    llm: FieldAwareLLM | None = None,
+    parallel: int = 2,
 ) -> dict[str, dict]:
     """Evaluate each candidate on core tasks + rotation tasks.
 
@@ -49,8 +49,8 @@ async def evaluate_fitness(
         core_tasks: Core benchmark tasks (math, code, logic).
         rotation_tasks: Q&A rotation tasks from the shared field.
         encoder: E5SmallEncoder for scoring rotation tasks by cosine similarity.
-        ollama_model: Ollama model name.
-        ollama_parallel: Max concurrent Ollama inference calls (semaphore limit).
+        llm: FieldAwareLLM instance for generate_bare inference.
+        parallel: Max concurrent inference calls (semaphore limit).
 
     Returns:
         {personality_id: {
@@ -61,9 +61,8 @@ async def evaluate_fitness(
             "combined_fitness": float,
         }}
     """
-    # Pre-check: is Ollama reachable?
-    if not await ollama_client.check_health():
-        logger.error("Ollama health check failed — skipping fitness evaluation")
+    if llm is None or not llm.is_loaded():
+        logger.error("FieldAwareLLM not available — skipping fitness evaluation")
         return {
             c.id: {
                 "core_results": [],
@@ -78,18 +77,18 @@ async def evaluate_fitness(
     try:
         return await _evaluate_fitness_parallel(
             candidates, core_tasks, rotation_tasks,
-            encoder, ollama_model, ollama_parallel,
+            encoder, llm, parallel,
         )
     except Exception as e:
-        if ollama_parallel > 1:
+        if parallel > 1:
             logger.warning(
                 "Parallel evaluation failed (parallel=%d): %s. "
                 "Retrying with parallel=1 (OOM fallback).",
-                ollama_parallel, e,
+                parallel, e,
             )
             return await _evaluate_fitness_parallel(
                 candidates, core_tasks, rotation_tasks,
-                encoder, ollama_model, 1,
+                encoder, llm, 1,
             )
         raise
 
@@ -99,14 +98,14 @@ async def _evaluate_fitness_parallel(
     core_tasks: list[dict],
     rotation_tasks: list[dict],
     encoder: E5SmallEncoder | None,
-    ollama_model: str,
-    ollama_parallel: int,
+    llm: FieldAwareLLM,
+    parallel: int,
 ) -> dict[str, dict]:
     """Inner implementation that runs all candidate x task evaluations in parallel."""
-    semaphore = asyncio.Semaphore(ollama_parallel)
+    semaphore = asyncio.Semaphore(parallel)
     logger.info(
         "Fitness evaluation: %d candidates, %d core tasks, %d rotation tasks, parallel=%d",
-        len(candidates), len(core_tasks), len(rotation_tasks), ollama_parallel,
+        len(candidates), len(core_tasks), len(rotation_tasks), parallel,
     )
 
     # --- Build all core task coroutines ---
@@ -117,7 +116,7 @@ async def _evaluate_fitness_parallel(
         for task in core_tasks:
             core_coroutines.append(
                 _evaluate_single_core_task(
-                    semaphore, candidate.id, system_prompt, task, ollama_model,
+                    semaphore, candidate.id, system_prompt, task, llm,
                 )
             )
 
@@ -130,7 +129,7 @@ async def _evaluate_fitness_parallel(
             for task in rotation_tasks:
                 rotation_coroutines.append(
                     _evaluate_single_rotation_task(
-                        semaphore, candidate.id, system_prompt, task, encoder, ollama_model,
+                        semaphore, candidate.id, system_prompt, task, encoder, llm,
                     )
                 )
 
@@ -230,7 +229,7 @@ async def _evaluate_single_core_task(
     candidate_id: str,
     system_prompt: str,
     task: dict,
-    ollama_model: str,
+    llm: FieldAwareLLM,
 ) -> tuple[str, dict]:
     """Evaluate a single core task for one candidate, with semaphore control.
 
@@ -241,11 +240,10 @@ async def _evaluate_single_core_task(
 
     async with semaphore:
         try:
-            response, duration = await ollama_client.chat(
+            response, duration = await llm.generate_bare(
                 system_prompt=system_prompt,
-                user_message=task["question"],
-                model=ollama_model,
-                timeout_sec=120,
+                user_input=task["question"],
+                max_new_tokens=1024,
             )
 
             if response is None:
@@ -297,7 +295,7 @@ async def _evaluate_single_rotation_task(
     system_prompt: str,
     task: dict,
     encoder: E5SmallEncoder,
-    ollama_model: str,
+    llm: FieldAwareLLM,
 ) -> tuple[str, float]:
     """Evaluate a single rotation task for one candidate, with semaphore control.
 
@@ -311,11 +309,10 @@ async def _evaluate_single_rotation_task(
 
     async with semaphore:
         try:
-            response, _ = await ollama_client.chat(
+            response, _ = await llm.generate_bare(
                 system_prompt=system_prompt,
-                user_message=instruction,
-                model=ollama_model,
-                timeout_sec=60,
+                user_input=instruction,
+                max_new_tokens=1024,
             )
 
             if response is None:

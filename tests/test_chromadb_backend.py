@@ -86,17 +86,6 @@ class TestEmitAndPerceive:
 
 
 class TestPurge:
-    def test_purge_by_context(self, field):
-        async def run():
-            await field.emit(_signal("keep", context="dialogue", seed=1))
-            await field.emit(_signal("remove", context="difficulty", seed=2))
-
-            result = await field.purge(PurgeCriteria(origin_context="difficulty"))
-            assert result.purged_count == 1
-            assert result.remaining_count == 1
-
-        asyncio.get_event_loop().run_until_complete(run())
-
     def test_purge_empty_field(self, field):
         async def run():
             result = await field.purge(PurgeCriteria())
@@ -112,54 +101,6 @@ class TestSnapshot:
                 await field.emit(_signal(f"snap_{i}", seed=i))
             snap = await field.snapshot()
             assert snap.total_count == 5
-
-        asyncio.get_event_loop().run_until_complete(run())
-
-
-class TestSignalExtra:
-    def test_extra_roundtrip_via_perceive(self, field):
-        """Signal.extra should survive emit → perceive roundtrip."""
-        s = Signal.create(
-            embedding=_vec(seed=10),
-            origin=SignalOrigin(system="test", context="rotation_task"),
-            extra={"instruction": "test question", "output": "test answer"},
-        )
-
-        async def run():
-            await field.emit(s)
-            perception = await field.perceive(PerceiveParams(max_signals=10, min_strength=0.0))
-            assert len(perception.signals) == 1
-            sig = perception.signals[0].signal
-            assert sig.extra["instruction"] == "test question"
-            assert sig.extra["output"] == "test answer"
-
-        asyncio.get_event_loop().run_until_complete(run())
-
-    def test_extra_roundtrip_via_snapshot(self, field):
-        """Signal.extra should survive emit → snapshot roundtrip."""
-        s = Signal.create(
-            embedding=_vec(seed=11),
-            origin=SignalOrigin(system="test", context="test"),
-            extra={"key": "value"},
-        )
-
-        async def run():
-            await field.emit(s)
-            snap = await field.snapshot()
-            assert snap.total_count == 1
-            assert snap.signals[0].extra["key"] == "value"
-
-        asyncio.get_event_loop().run_until_complete(run())
-
-    def test_no_extra_returns_empty_dict(self, field):
-        """Signals without extra should have empty dict."""
-        s = _signal("no extra", seed=12)
-
-        async def run():
-            await field.emit(s)
-            perception = await field.perceive(PerceiveParams(max_signals=10, min_strength=0.0))
-            assert len(perception.signals) == 1
-            assert perception.signals[0].signal.extra == {}
 
         asyncio.get_event_loop().run_until_complete(run())
 
@@ -182,3 +123,56 @@ class TestObserver:
         asyncio.get_event_loop().run_until_complete(run())
         logs = field._observer.get_recent_logs()
         assert any("PERCEIVE" in e.summary for e in logs)
+
+
+class TestStrengthExponent:
+    def test_exponent_1_matches_linear(self, field):
+        """α=1.0 should produce the same strength as the old linear formula."""
+        s = _signal("exp_test", norm=25.0, seed=7)
+
+        async def run():
+            await field.emit(s)
+            linear = await field.perceive(
+                PerceiveParams(min_strength=0.0, strength_exponent=1.0)
+            )
+            assert len(linear.signals) == 1
+            # With α=1.0: strength = decay * norm^1.0 = decay * norm
+            ps = linear.signals[0]
+            expected = ps.decay_factor * 25.0
+            assert abs(ps.strength - expected) < 1e-4
+
+        asyncio.get_event_loop().run_until_complete(run())
+
+    def test_exponent_half_compresses_range(self, field):
+        """α=0.5 should compress the strength dynamic range."""
+        s_low = _signal("low", norm=4.0, seed=10)
+        s_high = _signal("high", norm=36.0, seed=11)
+
+        async def run():
+            await field.emit(s_low)
+            await field.emit(s_high)
+
+            # Linear (α=1.0): ratio = 36/4 = 9x
+            linear = await field.perceive(
+                PerceiveParams(min_strength=0.0, strength_exponent=1.0)
+            )
+            lin_strengths = {
+                ps.signal.signal_id: ps.strength for ps in linear.signals
+            }
+
+            # Compressed (α=0.5): ratio = sqrt(36)/sqrt(4) = 6/2 = 3x
+            compressed = await field.perceive(
+                PerceiveParams(min_strength=0.0, strength_exponent=0.5)
+            )
+            comp_strengths = {
+                ps.signal.signal_id: ps.strength for ps in compressed.signals
+            }
+
+            lin_ratio = lin_strengths[s_high.signal_id] / lin_strengths[s_low.signal_id]
+            comp_ratio = comp_strengths[s_high.signal_id] / comp_strengths[s_low.signal_id]
+
+            assert lin_ratio > comp_ratio
+            assert abs(lin_ratio - 9.0) < 0.5
+            assert abs(comp_ratio - 3.0) < 0.5
+
+        asyncio.get_event_loop().run_until_complete(run())

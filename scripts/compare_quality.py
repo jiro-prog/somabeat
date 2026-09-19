@@ -59,7 +59,7 @@ def get_field_embeddings() -> np.ndarray | None:
             "data/fieldreceptor/field_receptor.pt",
             device="cuda",
         )
-        params = PerceiveParams(max_signals=10)
+        params = PerceiveParams(max_signals=30, strength_exponent=0.5)
 
         perception = asyncio.get_event_loop().run_until_complete(
             field.perceive(params),

@@ -218,6 +218,7 @@ async def generate_mutation_candidates(
     llm: FieldAwareLLM | None = None,
     receptor: FieldReceptorImpl | None = None,
     num_candidates: int = 3,
+    perceive_params: PerceiveParams | None = None,
 ) -> list[Personality]:
     """Generate mutation candidates using field perception as context.
 
@@ -233,7 +234,7 @@ async def generate_mutation_candidates(
     # 1. Perceive field and transform via FieldReceptor
     field_embeddings = None
     if receptor is not None:
-        perception = await field.perceive(PerceiveParams())
+        perception = await field.perceive(perceive_params or PerceiveParams())
         if perception.signals:
             field_embeddings = receptor.transduce(
                 [ps.signal.embedding for ps in perception.signals],
@@ -268,12 +269,8 @@ async def generate_mutation_candidates(
                     temperature=0.7,
                 )
             else:
-                from llamarcute_live import ollama_client
-                response, duration = await ollama_client.chat(
-                    system_prompt=MUTATION_SYSTEM_PROMPT,
-                    user_message=user_prompt,
-                    timeout_sec=120,
-                )
+                logger.error("Mutation %s: no LLM available", candidate_id)
+                continue
 
             if response is None:
                 logger.warning("Mutation %s: LLM returned None", candidate_id)

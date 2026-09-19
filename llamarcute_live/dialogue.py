@@ -1,8 +1,5 @@
 """Dialogue loop for llamarcute-live.
 
-Phase 1a: mock responses (echo / template).
-Phase 1b: real LLM via Ollama.
-
 Reference: llamarcute_live_design.md section 3.4, phase1_taskflow.md T6
 """
 
@@ -21,7 +18,7 @@ from shared_state.emit_log import ensure_emit_log_table, insert_emit_log
 from shared_state.encoder import E5SmallEncoder
 from shared_state.field_receptor import FieldReceptorImpl
 from shared_state.interface import PerceiveParams, SenseParams, Signal, SignalOrigin
-from shared_state.observer import LoggingObserver
+from shared_state.observer import FieldSnapshotLogger, LoggingObserver
 
 from llamarcute_live.llm_inference import FieldAwareLLM
 from llamarcute_live.personality import Personality
@@ -51,11 +48,12 @@ class DialogueManager:
         perceive_params: PerceiveParams | None = None,
         sense_params: SenseParams | None = None,
         use_llm: bool = False,
-        ollama_model: str = "qwen3:8b",
+        ollama_model: str = "",  # deprecated, kept for backward compat
         metrics_enabled: bool = False,
         max_conversation_history: int = 10,
         max_prompt_tokens: int = 500,
         empty_perceive: bool = False,
+        sleepyjean=None,
     ) -> None:
         self.personality = personality
         self.field = field
@@ -76,6 +74,7 @@ class DialogueManager:
         self._max_history: int = max_conversation_history
         self._max_prompt_tokens = max_prompt_tokens
         self._empty_perceive = empty_perceive
+        self._sleepyjean = sleepyjean
 
     async def init_db(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,16 +99,53 @@ class DialogueManager:
                     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
                 )
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS field_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    trigger_context TEXT NOT NULL,
+                    signal_count INTEGER NOT NULL,
+                    signal_count_by_origin TEXT,
+                    strength_max REAL,
+                    strength_median REAL,
+                    strength_std REAL,
+                    raw_norm_mean REAL,
+                    oldest_signal_age_hours REAL,
+                    dialogue_log_id INTEGER,
+                    response_time_ms INTEGER,
+                    strength_exponent REAL,
+                    baseline_version TEXT NOT NULL DEFAULT 'v2'
+                )
+            """)
+            # Migration: add strength_exponent to existing tables
+            try:
+                await db.execute(
+                    "ALTER TABLE field_snapshots ADD COLUMN strength_exponent REAL"
+                )
+            except Exception:
+                pass
+            # Migration: add baseline_version for M1-2 v1/v2 separation
+            try:
+                await db.execute(
+                    "ALTER TABLE field_snapshots ADD COLUMN baseline_version TEXT NOT NULL DEFAULT 'v2'"
+                )
+                # Label pre-existing data as v1 (pre-KG integration)
+                await db.execute(
+                    "UPDATE field_snapshots SET baseline_version = 'v1' WHERE baseline_version = 'v2'"
+                )
+            except Exception:
+                pass  # column already exists
             await db.commit()
         await ensure_emit_log_table(self.db_path)
 
-    async def save_log(self, role: str, content: str) -> None:
+    async def save_log(self, role: str, content: str) -> int:
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
+            cursor = await db.execute(
                 "INSERT INTO dialogue_log (role, content) VALUES (?, ?)",
                 (role, content),
             )
             await db.commit()
+            return cursor.lastrowid
 
     async def get_today_logs(self) -> list[dict]:
         from datetime import date
@@ -164,7 +200,7 @@ class DialogueManager:
         # Fallback: conservative estimate (overestimates for safety)
         return len(text.encode("utf-8")) // 3
 
-    def build_prompt(self) -> str:
+    def build_prompt(self, recall_text: str | None = None) -> str:
         """Build system prompt with personality and conversation history.
 
         Total prompt is kept under _max_prompt_tokens by trimming
@@ -180,6 +216,11 @@ class DialogueManager:
         sections.append("")
         sections.append("## 行動規範")
         sections.append(self.personality.to_prompt_section())
+
+        # Insert recall text after personality rules, before conversation
+        if recall_text:
+            sections.append("")
+            sections.append(recall_text)
 
         base_prompt = "\n".join(sections)
         base_tokens = self._count_tokens(base_prompt)
@@ -209,7 +250,7 @@ class DialogueManager:
 
     async def generate_response(self, user_input: str, system_prompt: str,
                                 field_embeddings=None) -> str:
-        """Generate response via FieldAwareLLM (with field injection) or Ollama fallback."""
+        """Generate response via FieldAwareLLM (with field injection)."""
         if not self.use_llm:
             return f"[mock] あなたの入力: 「{user_input}」を受け取りました。何か気になることある？"
 
@@ -220,13 +261,8 @@ class DialogueManager:
                 field_embeddings=field_embeddings,
             )
         else:
-            # Fallback to Ollama (no field injection)
-            from llamarcute_live.ollama_client import chat
-            response, duration = await chat(
-                system_prompt=system_prompt,
-                user_message=user_input,
-                model=self.ollama_model,
-            )
+            logger.error("No LLM available for response generation")
+            return ERROR_RESPONSE
 
         if response is None:
             logger.warning("LLM response was None, returning error message")
@@ -254,8 +290,6 @@ class DialogueManager:
         """Emit a difficulty signal to the shared field."""
         text = f"この質問への回答が難しかった: {description}"
         embedding = self.encoder.encode_for_emit(text)
-        # Higher norm for difficulty signals (1.5-3.0)
-        embedding = embedding * 2.0
         signal = Signal.create(
             embedding=embedding,
             origin=DIFFICULTY_ORIGIN,
@@ -268,7 +302,21 @@ class DialogueManager:
         import time as _time
         t_start = _time.monotonic()
 
-        await self.save_log("user", user_input)
+        user_log_id = await self.save_log("user", user_input)
+
+        # Recall: retrieve related knowledge from KG or MemoryStore
+        recall_text = None
+        if self._sleepyjean is not None:
+            try:
+                t0 = _time.monotonic()
+                recall_result = self._sleepyjean.on_user_input(user_input)
+                t_recall = _time.monotonic() - t0
+                recall_text = recall_result.triples_text
+                logger.info("[TIMING] recall: %.3fs (source=%s, text=%s)",
+                            t_recall, recall_result.source,
+                            f"{len(recall_text)} chars" if recall_text else "None")
+            except Exception as e:
+                logger.warning("SleepyJean recall failed (non-fatal): %s", e)
 
         t0 = _time.monotonic()
         field_embeddings = await self.perceive_field()
@@ -281,7 +329,7 @@ class DialogueManager:
             f"{field_embeddings.shape}" if field_embeddings is not None else "None",
         )
 
-        system_prompt = self.build_prompt()
+        system_prompt = self.build_prompt(recall_text=recall_text)
 
         logger.debug("System prompt:\n%s", system_prompt)
         t0 = _time.monotonic()
@@ -299,6 +347,21 @@ class DialogueManager:
             t_total, t_perceive, t_generate, t_emit,
         )
         await self.save_log("assistant", response)
+
+        # Record field snapshot (M1 measurement)
+        if isinstance(self.observer, FieldSnapshotLogger):
+            try:
+                await asyncio.wait_for(
+                    self.observer.record_snapshot(
+                        trigger_context="dialogue",
+                        dialogue_log_id=user_log_id,
+                        response_time_ms=int(t_total * 1000),
+                        strength_exponent=self.perceive_params.strength_exponent,
+                    ),
+                    timeout=5.0,
+                )
+            except Exception as e:
+                logger.error("Failed to record field snapshot: %s", e)
 
         # 会話バッファに追記（ワーキングメモリ）— エラー応答は含めない
         if response != ERROR_RESPONSE:
